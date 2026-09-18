@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Virtual environments
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Tests / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+
+# Generated audio
+*.wav
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -219,7 +219,7 @@ def test_status_is_a_complete_transport_response(harness, status):
     assert result == {
         "request_id": request_id, "status": status.value,
         "message": None, "error": "domain error" if status == ActionStatus.FAILED else None,
-        "step_results": [], "confirmation_steps": [], "metadata": {},
+        "step_results": [], "confirmation_steps": [], "pending_confirmation_steps": [], "metadata": {},
     }
     assert json.loads(json.dumps(result, allow_nan=False)) == result
 
@@ -321,7 +321,7 @@ def test_unknown_timeout_then_success_and_consumed_result(harness):
         worker.result(request_id)
 
 
-def test_duplicate_id_rejected_until_consumption_then_executes_again(harness):
+def test_duplicate_id_rejected_even_after_terminal_consumption(harness):
     entered, release = Event(), harness.gate()
     calls = []
 
@@ -334,7 +334,7 @@ def test_duplicate_id_rejected_until_consumption_then_executes_again(harness):
     worker = harness.worker(run)
     worker.submit(payload(request_id=REQUEST_ID))
     assert entered.wait(LIMIT)
-    with pytest.raises(ValueError, match="unconsumed"):
+    with pytest.raises(ValueError, match="already used"):
         worker.submit(payload(request_id=REQUEST_ID.upper()))
     release.set()
     # Observe publication without consuming and without an unbounded join.
@@ -342,14 +342,13 @@ def test_duplicate_id_rejected_until_consumption_then_executes_again(harness):
         assert worker._condition.wait_for(
             lambda: worker._work[REQUEST_ID].response is not None, timeout=LIMIT,
         )
-    with pytest.raises(ValueError, match="unconsumed"):
+    with pytest.raises(ValueError, match="already used"):
         worker.submit(payload(request_id=REQUEST_ID))
     first = worker.result(REQUEST_ID)
     first["metadata"]["caller_mutation"] = True
-    worker.submit(payload(request_id=REQUEST_ID))
-    second = worker.result(REQUEST_ID, timeout=LIMIT)
-    assert second["metadata"] == {}
-    assert len(calls) == 2
+    with pytest.raises(ValueError, match="already used"):
+        worker.submit(payload(request_id=REQUEST_ID, goal="Replacement"))
+    assert len(calls) == 1
 
 
 def test_concurrent_same_id_has_one_admission(harness):
@@ -392,7 +391,7 @@ def test_two_waiting_readers_only_one_consumes(harness, monkeypatch):
     assert isinstance(next(value for ok, value in outcomes if not ok), KeyError)
 
 
-def test_waiter_cannot_consume_new_job_reusing_id(harness, monkeypatch):
+def test_waiter_cannot_observe_replacement_after_rejected_id_reuse(harness, monkeypatch):
     waiting = Event()
     release = harness.gate()
     worker = harness.worker(lambda request: release.wait(LIMIT) and completed(request))
@@ -404,10 +403,11 @@ def test_waiter_cannot_consume_new_job_reusing_id(harness, monkeypatch):
             return original_wait(timeout)
         waiting.set()
         notified = original_wait(timeout)
-        # Execute the winning consumer/re-submission while still holding the
+        # Consume and attempt forbidden ID reuse while still holding the
         # same lock, before the losing reader can recheck its old record.
         worker.result(REQUEST_ID)
-        worker.submit(payload(request_id=REQUEST_ID))
+        with pytest.raises(ValueError, match="already used"):
+            worker.submit(payload(request_id=REQUEST_ID))
         return notified
 
     monkeypatch.setattr(worker._condition, "wait", controlled_wait)
@@ -416,7 +416,8 @@ def test_waiter_cannot_consume_new_job_reusing_id(harness, monkeypatch):
     release.set()
     ok, error = reader.get(timeout=LIMIT)
     assert not ok and isinstance(error, KeyError)
-    assert worker.result(REQUEST_ID, timeout=LIMIT)["status"] == "completed"
+    with pytest.raises(KeyError):
+        worker.result(REQUEST_ID)
 
 
 def test_shutdown_drains_full_queue_preserves_results_and_is_idempotent(harness):
@@ -656,8 +657,8 @@ def test_real_orchestrator_with_offline_dependencies(harness, expected):
     if expected == "waiting_for_permission":
         assert result["confirmation_steps"] == [1]
         # Same identity and context cannot grant permission or resume a plan.
-        worker.submit(payload(request_id=REQUEST_ID))
-        assert worker.result(REQUEST_ID, timeout=LIMIT)["status"] == expected
+        with pytest.raises(ValueError, match="already used"):
+            worker.submit(payload(request_id=REQUEST_ID))
         assert calls == []
 
 

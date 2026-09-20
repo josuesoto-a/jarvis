@@ -201,7 +201,7 @@ def test_no_execution_report(status):
     assert response == {
         "request_id": str(REQUEST_ID), "status": status.value,
         "message": None, "error": "Planning failed",
-        "step_results": [], "confirmation_steps": [], "metadata": {},
+        "step_results": [], "confirmation_steps": [], "pending_confirmation_steps": [], "metadata": {},
     }
 
 
@@ -434,12 +434,14 @@ def test_real_engine_confirmation_policy_survives_completion():
     engine, calls = make_engine()
     request = to_action_request(payload())
     assert calls == []
-    waiting = to_transport_response(engine.run(request, confirmed_steps=frozenset({1})))
+    initial = engine.run(request)
+    assert initial.waiting_for_permission
+    waiting = to_transport_response(engine.resume(request.request_id, confirmed_steps=frozenset({1})))
     assert waiting["status"] == "waiting_for_permission"
     # Policy includes 1, although only 2 remains unconfirmed. No text parsing.
     assert waiting["confirmation_steps"] == [1, 2]
     assert calls == []
-    result = engine.run(request, confirmed_steps=frozenset({1, 2}))
+    result = engine.resume(request.request_id, confirmed_steps=frozenset({2}))
     assert len(calls) == 2
     response = to_transport_response(result)
     assert response["status"] == "completed"
@@ -470,7 +472,9 @@ def test_real_engine_validation_diagnostics_preserved():
 
 def test_real_engine_partial_failure():
     engine, calls = make_engine(fail_step=2)
-    result = engine.run(to_action_request(payload()), confirmed_steps=frozenset({1, 2}))
+    request = to_action_request(payload())
+    assert engine.run(request).waiting_for_permission
+    result = engine.resume(request.request_id, confirmed_steps=frozenset({1, 2}))
     response = to_transport_response(result)
     assert response["status"] == "failed"
     assert response["message"] == "Execution failed at step 2."

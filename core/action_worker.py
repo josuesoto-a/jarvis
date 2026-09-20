@@ -5,24 +5,35 @@ submit() validates/copies input synchronously, but never executes the action or
 waits for queue space. Capacity counts queued jobs, excluding the running job.
 The caller must not mutate input DURING submit; subsequent mutations are safe.
 
-IDs are canonical UUID strings, as in core.transport, and confer no permission.
-A duplicate ID is rejected while queued, running, or awaiting result retrieval.
-After consumption it may be submitted again and WILL execute again: this is an
-in-memory correlation guard, not deduplication or confirmed-plan resumption.
+IDs are canonical UUID strings and confer no permission. Accepted IDs remain
+reserved for this worker's lifetime, even after terminal result consumption.
+A fresh action requires a fresh ID, so delayed confirmations cannot target a
+replacement plan.
 
-result() consumes a result once. Unknown/consumed IDs raise KeyError; pending
-ones raise TimeoutError unless the caller explicitly waits. Unconsumed results
-remain available after shutdown and occupy memory until consumed. Only the
-input queue is bounded; this component is not a durable result store.
+confirm(id, confirmed_steps=frozenset({...})) requires a bound Orchestrator.run.
+It validates against that same owner, then enqueues resume without executing it.
+Only the Orchestrator owns pending plans and cumulative authorization. Run-only
+callables remain supported for submit(), but cannot support confirm().
+
+result() consumes snapshots in publication order, including an unread WAITING
+snapshot preceding a resume result. Consuming WAITING preserves confirmability.
+Unknown/consumed terminal IDs raise KeyError; pending results raise TimeoutError
+unless the caller explicitly waits. Results remain readable after shutdown.
+Once a closed waiting request has no unread results, result raises RuntimeError
+instead of waiting for a confirmation that can no longer be admitted.
+Only the operation queue is bounded; pending records and results use memory.
 
 shutdown() closes admission and drains all accepted jobs without cancellation.
 It is idempotent, nonblocking by default, and cannot restart the worker. Optional
 waiting joins the thread; timeout leaves draining in progress. An action that
 never returns can prevent shutdown completion (the thread is non-daemon).
+Waiting plans are never auto-confirmed. After shutdown they cannot be resumed
+through this worker; the Orchestrator retains its in-memory state.
 """
 
+from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isfinite
 from queue import Queue
 from threading import Condition, Thread, current_thread
@@ -39,7 +50,19 @@ if TYPE_CHECKING:
 @dataclass
 class _Work:
     request: ActionRequest
-    response: TransportResponse | None = None
+    state: str = "queued"
+    responses: deque[TransportResponse] = field(default_factory=deque)
+
+    @property
+    def response(self) -> TransportResponse | None:
+        return self.responses[0] if self.responses else None
+
+
+@dataclass(frozen=True)
+class _Operation:
+    work: _Work
+    # None is initial run; a nonempty set is a queued resume command, not grants.
+    confirmed_steps: frozenset[int] | None = None
 
 
 def _validate_timeout(timeout: float | None) -> None:
@@ -61,7 +84,11 @@ class ActionWorker:
         if not callable(run):
             raise TypeError("run must be callable")
         self._run = run
-        self._queue: Queue[_Work] = Queue(maxsize=capacity)
+        owner = getattr(run, "__self__", None)
+        self._resume = getattr(owner, "resume", None)
+        self._validate_confirmation = getattr(owner, "validate_confirmation", None)
+        self._queue: Queue[_Operation] = Queue(maxsize=capacity)
+        self._used_request_ids: set[str] = set()
         self._work: dict[str, _Work] = {}
         # All lifecycle, queue admission/removal and result state use this lock.
         # Queue operations under it are always nonblocking. Condition waits
@@ -101,18 +128,48 @@ class ActionWorker:
         work = _Work(request)
         with self._condition:
             self._check_accepting()
-            if request_id in self._work:
-                raise ValueError("request_id already has an unconsumed job")
-            self._queue.put_nowait(work)
+            if request_id in self._used_request_ids:
+                raise ValueError("request_id already used; use a fresh ID for a new action")
+            self._queue.put_nowait(_Operation(work))
+            self._used_request_ids.add(request_id)
             self._work[request_id] = work
+            self._condition.notify_all()
+        return request_id
+
+    def confirm(self, request_id: str, *, confirmed_steps: frozenset[int]) -> str:
+        """Admit resume immediately or raise; never execute on the caller thread.
+
+        Use the canonical ID returned by submit and an explicit nonempty
+        frozenset of outstanding step numbers. Unknown IDs raise KeyError;
+        terminal/non-waiting/in-flight requests and invalid steps are rejected.
+        queue.Full leaves scheduling and Orchestrator authorization untouched.
+        A concurrent shutdown either rejects this operation or drains it once.
+        """
+        with self._condition:
+            self._check_accepting()
+            work = self._work.get(request_id)
+            if work is None:
+                if request_id in self._used_request_ids:
+                    raise ValueError("request is terminal")
+                raise KeyError(request_id)
+            if work.state != "waiting_for_permission":
+                raise ValueError("request is not waiting for confirmation (or resume is queued/running)")
+            if not callable(self._resume) or not callable(self._validate_confirmation):
+                raise RuntimeError("confirm requires a bound Orchestrator.run")
+            # Read-only domain validation: no plans or grant history are copied.
+            self._validate_confirmation(
+                work.request.request_id, confirmed_steps=confirmed_steps,
+            )
+            self._queue.put_nowait(_Operation(work, confirmed_steps))
+            work.state = "queued_resume"
             self._condition.notify_all()
         return request_id
 
     def result(self, request_id: str, *, timeout: float | None = 0) -> TransportResponse:
         """Consume by the ID returned from submit; None waits without a deadline.
 
-        Concurrent readers race to consume: exactly one succeeds. Readers of an
-        old job cannot consume a later job reusing the ID (including after a wait).
+        Concurrent readers race to consume each snapshot exactly once. WAITING
+        does not end a request; results from accepted resumes remain retrievable.
         """
         _validate_timeout(timeout)
         with self._condition:
@@ -120,17 +177,24 @@ class ActionWorker:
             if work.response is None and timeout != 0 and current_thread() is self._thread:
                 raise RuntimeError("worker cannot wait for its own results")
             ready = self._condition.wait_for(
-                lambda: work.response is not None or self._work.get(request_id) is not work,
+                lambda: (
+                    work.response is not None or self._work.get(request_id) is not work
+                    or (self._closed and work.state == "waiting_for_permission")
+                ),
                 timeout=timeout,
             )
             if self._work.get(request_id) is not work:
                 raise KeyError(request_id)
+            if work.response is None and self._closed and work.state == "waiting_for_permission":
+                raise RuntimeError("worker is shut down; waiting request cannot resume")
             if not ready:
                 raise TimeoutError(f"Result not ready: {request_id}")
             assert work.response is not None
-            del self._work[request_id]
+            response = work.responses.popleft()
+            if work.state == "terminal" and not work.responses:
+                del self._work[request_id]
             self._condition.notify_all()
-            return work.response
+            return response
 
     def shutdown(self, *, wait: bool = False, timeout: float | None = None) -> None:
         """Drain accepted jobs; optionally join, raising TimeoutError on timeout."""
@@ -154,11 +218,19 @@ class ActionWorker:
                 self._condition.wait_for(lambda: self._closed or not self._queue.empty())
                 if self._queue.empty():
                     return
-                work = self._queue.get_nowait()
+                operation = self._queue.get_nowait()
+                work = operation.work
+                resuming = operation.confirmed_steps is not None
+                work.state = "running_resume" if resuming else "running"
             request_id = str(work.request.request_id)
-            phase = "execution"
+            phase = "resume" if resuming else "execution"
             try:
-                outcome = self._run(work.request)
+                if resuming:
+                    outcome = self._resume(
+                        work.request.request_id, confirmed_steps=operation.confirmed_steps,
+                    )
+                else:
+                    outcome = self._run(work.request)
                 phase = "response_conversion"
                 response = to_transport_response(outcome)
                 if response["request_id"] != request_id:
@@ -169,12 +241,16 @@ class ActionWorker:
                 response = TransportResponse(
                     request_id=request_id, status="failed", message=None,
                     error=f"Worker {phase} failed ({type(error).__name__}).",
-                    step_results=[], confirmation_steps=[],
+                    step_results=[], confirmation_steps=[], pending_confirmation_steps=[],
                     metadata={"worker_error": {
                         "phase": phase, "exception_type": type(error).__name__,
                     }},
                 )
             with self._condition:
-                work.response = response
+                work.responses.append(response)
+                work.state = (
+                    "waiting_for_permission" if response["status"] == "waiting_for_permission"
+                    else "terminal"
+                )
                 self._queue.task_done()
                 self._condition.notify_all()

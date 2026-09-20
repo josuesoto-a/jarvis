@@ -14,6 +14,7 @@ This module defines data only.
 
 from dataclasses import dataclass, field
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Mapping
 from uuid import UUID, uuid4
 
@@ -112,6 +113,18 @@ class ExecutionArgument:
 
     def __post_init__(self) -> None:
 
+        # Literals are strings by contract, not arbitrary Python objects.
+        # Check before calling strip: duck-typed containers could otherwise
+        # retain mutable nested values inside a frozen argument.
+        if self.value is not None and type(self.value) is not str:
+            raise TypeError("ExecutionArgument.value must be a plain string or None")
+        if self.output_key is not None and type(self.output_key) is not str:
+            raise TypeError("output_key must be a plain string or None")
+        if self.step_number is not None and type(self.step_number) is not int:
+            raise TypeError("step_number must be a plain integer or None")
+        if type(self.source) is not ArgumentSource:
+            raise TypeError("source must be an ArgumentSource")
+
         if self.source == ArgumentSource.LITERAL:
 
             if self.value is None or not self.value.strip():
@@ -172,6 +185,8 @@ class ExecutionArgument:
         value: str,
     ) -> "ExecutionArgument":
 
+        if type(value) is not str:
+            raise TypeError("Literal value must be a plain string")
         return cls(
             source=ArgumentSource.LITERAL,
             value=value.strip(),
@@ -185,6 +200,8 @@ class ExecutionArgument:
         output_key: str,
     ) -> "ExecutionArgument":
 
+        if type(output_key) is not str:
+            raise TypeError("output_key must be a plain string")
         return cls(
             source=ArgumentSource.STEP_OUTPUT,
             step_number=step_number,
@@ -285,6 +302,15 @@ class ExecutionStep:
         PermissionMode.AUTOMATIC
     )
 
+    def __post_init__(self) -> None:
+        # frozen=True alone leaves a caller-owned arguments dict mutable.
+        # Detach it before a plan can be presented for confirmation.
+        arguments = dict(self.arguments)
+        if any(type(key) is not str or type(value) is not ExecutionArgument
+               for key, value in arguments.items()):
+            raise TypeError("arguments must map plain strings to ExecutionArgument values")
+        object.__setattr__(self, "arguments", MappingProxyType(arguments))
+
 
 # ============================================================
 # EXECUTION PLAN
@@ -304,6 +330,13 @@ class ExecutionPlan:
     ]
 
     overall_risk: RiskLevel
+
+    def __post_init__(self) -> None:
+        # Detach callers that supplied a list despite the tuple annotation.
+        steps = tuple(self.steps)
+        if any(type(step) is not ExecutionStep for step in steps):
+            raise TypeError("steps must contain ExecutionStep values")
+        object.__setattr__(self, "steps", steps)
 
 
 # ============================================================

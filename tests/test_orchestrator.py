@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+import pytest
+
 from core.contracts import (
     ActionRequest,
     ActionStatus,
@@ -344,53 +346,17 @@ def test_plan_request_id_must_match_request():
     )
 
 
-def test_confirmed_steps_are_forwarded():
-
+def test_run_rejects_confirmations_before_planning():
     request = make_request()
+    planner = FakePlanner(plan=make_plan(request.request_id))
+    executor = FakeExecutor(report=make_report(request.request_id))
+    orchestrator = Orchestrator(planner=planner, executor=executor)
 
-    plan = make_plan(
-        request.request_id
-    )
+    with pytest.raises(TypeError, match="confirmed_steps"):
+        orchestrator.run(request, confirmed_steps=frozenset({1}))
 
-    report = make_report(
-        request.request_id
-    )
-
-    executor = FakeExecutor(
-        report=report
-    )
-
-
-    confirmed = frozenset(
-        {
-            1,
-            3,
-        }
-    )
-
-
-    result = Orchestrator(
-        planner=FakePlanner(
-            plan=plan
-        ),
-        executor=executor,
-    ).run(
-        request,
-        confirmed_steps=confirmed,
-    )
-
-
-    assert (
-        result.status
-        == ActionStatus.COMPLETED
-    )
-
-    assert executor.calls == [
-        (
-            plan,
-            confirmed,
-        )
-    ]
+    assert planner.calls == []
+    assert executor.calls == []
 
 
 def test_executor_failure_is_preserved():

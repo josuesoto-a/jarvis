@@ -49,8 +49,8 @@ class TransportResponse(TypedDict):
     """Wire output; status is authoritative, including when no report exists.
 
     confirmation_steps lists steps requiring confirmation BY POLICY, even after
-    completion or blocking. It is NOT the outstanding confirmation set: the
-    current domain result does not carry previously granted confirmations.
+    completion or blocking. pending_confirmation_steps lists outstanding steps
+    for this pending plan, and is empty for every non-waiting status.
     Read status == 'waiting_for_permission' to determine active waiting.
 
     message is the execution report's message (None without a report); error is
@@ -65,6 +65,7 @@ class TransportResponse(TypedDict):
     error: str | None
     step_results: list[TransportStepResult]
     confirmation_steps: list[int]
+    pending_confirmation_steps: list[int]
     metadata: dict[str, JSONValue]
 
 
@@ -210,6 +211,9 @@ def to_transport_response(result: "OrchestrationResult") -> TransportResponse:
             for step in report.step_results
         ] if report is not None else [],
         "confirmation_steps": confirmation_steps,
+        "pending_confirmation_steps": (
+            result.pending_confirmation_steps if result.waiting_for_permission else ()
+        ),
         "metadata": metadata,
     }
     return cast(TransportResponse, to_json_safe(response))

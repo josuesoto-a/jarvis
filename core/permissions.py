@@ -64,7 +64,7 @@ _CAPABILITY_PERMISSION_FLOOR = {
         PermissionMode.AUTOMATIC,
 
     "browser":
-        PermissionMode.AUTOMATIC,
+        PermissionMode.CONFIRM_BEFORE_EXECUTION,
 
     "computer_use":
         PermissionMode.CONFIRM_BEFORE_EXECUTION,

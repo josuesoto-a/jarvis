@@ -262,7 +262,12 @@ def test_executor_resolves_previous_step_output():
 
 
     report = executor.execute(
-        plan
+        plan,
+        confirmed_steps=frozenset(
+            {
+                2,
+            }
+        ),
     )
 
 
@@ -325,7 +330,12 @@ def test_missing_runtime_blocks_before_any_execution():
 
 
     report = executor.execute(
-        plan
+        plan,
+        confirmed_steps=frozenset(
+            {
+                2,
+            }
+        ),
     )
 
 
@@ -586,7 +596,12 @@ def test_missing_dependency_output_fails_execution():
 
 
     report = executor.execute(
-        plan
+        plan,
+        confirmed_steps=frozenset(
+            {
+                2,
+            }
+        ),
     )
 
 
@@ -670,7 +685,12 @@ def test_handler_exception_stops_execution():
 
 
     report = executor.execute(
-        plan
+        plan,
+        confirmed_steps=frozenset(
+            {
+                2,
+            }
+        ),
     )
 
 

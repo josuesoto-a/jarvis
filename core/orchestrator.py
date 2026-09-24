@@ -122,6 +122,87 @@ class Orchestrator:
         # Protect admission and atomic consumption, never external execution.
         self._lock = Lock()
 
+    def preview_single_browser(self, request_id: UUID) -> str | None:
+        """Read-only preview of one pending, literal, low-risk browser step.
+
+        A multi-step plan or an unresolved URL cannot be approved by the
+        initial local keyboard UI. This method never grants permission.
+        """
+        from unicodedata import category
+        from urllib.parse import urlsplit
+
+        from core.contracts import ArgumentSource, RiskLevel
+
+        with self._lock:
+            pending = self._pending.get(request_id)
+
+            if pending is None:
+                return None
+
+            result = pending.result
+            plan = result.plan
+
+            if (
+                result.status != ActionStatus.WAITING_FOR_PERMISSION
+                or result.pending_confirmation_steps != (1,)
+                or plan is None
+                or len(plan.steps) != 1
+                or plan.overall_risk != RiskLevel.LOW
+            ):
+                return None
+
+            step = plan.steps[0]
+
+            if (
+                step.step_number != 1
+                or step.capability != "browser"
+                or step.risk != RiskLevel.LOW
+                or set(step.arguments) != {"url"}
+            ):
+                return None
+
+            argument = step.arguments["url"]
+
+            if (
+                argument.source != ArgumentSource.LITERAL
+                or type(argument.value) is not str
+            ):
+                return None
+
+            url = argument.value
+
+        # Keep console previews unambiguous and safe to display.
+        if (
+            not url
+            or len(url) > 2048
+            or "\\" in url
+            or any(
+                character.isspace()
+                or category(character) in {"Cc", "Cf"}
+                for character in url
+            )
+        ):
+            return None
+
+        try:
+            parsed = urlsplit(url)
+
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+            ):
+                return None
+
+            # Accessing .port also rejects malformed port numbers.
+            _ = parsed.port
+
+        except ValueError:
+            return None
+
+        return url
+
     def run(self, request: ActionRequest) -> OrchestrationResult:
         """Plan a new request exactly once, without pre-authorizing any step."""
         with self._lock:

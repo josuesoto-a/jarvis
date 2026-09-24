@@ -125,56 +125,18 @@ class Orchestrator:
         # Protect admission and atomic consumption, never external execution.
         self._lock = Lock()
 
-    def preview_single_browser(self, request_id: UUID) -> str | None:
-        """Read-only preview of one pending, literal, low-risk browser step.
+    @staticmethod
+    def _validate_browser_preview_url(
+        url: object,
+    ) -> str | None:
+        """Validate one browser URL before showing it for local approval."""
 
-        A multi-step plan or an unresolved URL cannot be approved by the
-        initial local keyboard UI. This method never grants permission.
-        """
         from unicodedata import category
         from urllib.parse import urlsplit
 
-        from core.contracts import ArgumentSource, RiskLevel
+        if type(url) is not str:
+            return None
 
-        with self._lock:
-            pending = self._pending.get(request_id)
-
-            if pending is None:
-                return None
-
-            result = pending.result
-            plan = result.plan
-
-            if (
-                result.status != ActionStatus.WAITING_FOR_PERMISSION
-                or result.pending_confirmation_steps != (1,)
-                or plan is None
-                or len(plan.steps) != 1
-                or plan.overall_risk != RiskLevel.LOW
-            ):
-                return None
-
-            step = plan.steps[0]
-
-            if (
-                step.step_number != 1
-                or step.capability != "browser"
-                or step.risk != RiskLevel.LOW
-                or set(step.arguments) != {"url"}
-            ):
-                return None
-
-            argument = step.arguments["url"]
-
-            if (
-                argument.source != ArgumentSource.LITERAL
-                or type(argument.value) is not str
-            ):
-                return None
-
-            url = argument.value
-
-        # Keep console previews unambiguous and safe to display.
         if (
             not url
             or len(url) > 2048
@@ -198,13 +160,191 @@ class Orchestrator:
             ):
                 return None
 
-            # Accessing .port also rejects malformed port numbers.
+            # Also rejects malformed numeric ports.
             _ = parsed.port
 
         except ValueError:
             return None
 
         return url
+
+    def preview_single_browser(
+        self,
+        request_id: UUID,
+    ) -> str | None:
+        """Preview the original C1 literal one-step browser action."""
+
+        from core.contracts import (
+            ArgumentSource,
+            RiskLevel,
+        )
+
+        with self._lock:
+            pending = self._pending.get(
+                request_id
+            )
+
+            if pending is None:
+                return None
+
+            result = pending.result
+            plan = result.plan
+
+            if (
+                result.status
+                != ActionStatus.WAITING_FOR_PERMISSION
+                or result.pending_confirmation_steps
+                != (1,)
+                or plan is None
+                or len(plan.steps) != 1
+                or plan.overall_risk
+                != RiskLevel.LOW
+            ):
+                return None
+
+            step = plan.steps[0]
+
+            if (
+                step.step_number != 1
+                or step.capability != "browser"
+                or step.risk != RiskLevel.LOW
+                or set(step.arguments) != {"url"}
+            ):
+                return None
+
+            argument = step.arguments[
+                "url"
+            ]
+
+            if (
+                argument.source
+                != ArgumentSource.LITERAL
+            ):
+                return None
+
+            url = argument.value
+
+        return (
+            self
+            ._validate_browser_preview_url(
+                url
+            )
+        )
+
+    def preview_checkpoint_browser(
+        self,
+        request_id: UUID,
+        *,
+        step_number: int,
+    ) -> str | None:
+        """Preview an exact browser URL frozen in a private checkpoint.
+
+        This is the C2 approval surface. It reads only Orchestrator's
+        private continuation checkpoint, never the caller-visible copy.
+        It grants no permission and executes no capability.
+        """
+
+        from core.contracts import (
+            ArgumentSource,
+            RiskLevel,
+        )
+
+        if (
+            type(step_number) is not int
+            or step_number < 1
+        ):
+            return None
+
+        with self._lock:
+            pending = self._pending.get(
+                request_id
+            )
+
+            if pending is None:
+                return None
+
+            result = pending.result
+            plan = result.plan
+            checkpoint = pending.checkpoint
+
+            if (
+                result.status
+                != ActionStatus.WAITING_FOR_PERMISSION
+                or result.pending_confirmation_steps
+                != (step_number,)
+                or plan is None
+                or plan.overall_risk
+                != RiskLevel.LOW
+                or checkpoint is None
+                or checkpoint.next_step_number
+                != step_number
+            ):
+                return None
+
+            matching_steps = tuple(
+                step
+                for step in plan.steps
+                if (
+                    step.step_number
+                    == step_number
+                )
+            )
+
+            if len(matching_steps) != 1:
+                return None
+
+            step = matching_steps[0]
+
+            if (
+                step.capability != "browser"
+                or step.risk != RiskLevel.LOW
+                or set(step.arguments) != {"url"}
+            ):
+                return None
+
+            source_argument = (
+                step.arguments["url"]
+            )
+
+            if (
+                source_argument.source
+                != ArgumentSource.STEP_OUTPUT
+            ):
+                return None
+
+            # A checkpoint may contain only completed earlier work.
+            if any(
+                item.status
+                != ActionStatus.COMPLETED
+                or item.step_number
+                >= step_number
+                for item
+                in checkpoint.step_results
+            ):
+                return None
+
+            if (
+                set(
+                    checkpoint
+                    .resolved_arguments
+                )
+                != {"url"}
+            ):
+                return None
+
+            url = (
+                checkpoint
+                .resolved_arguments[
+                    "url"
+                ]
+            )
+
+        return (
+            self
+            ._validate_browser_preview_url(
+                url
+            )
+        )
 
     def run(self, request: ActionRequest) -> OrchestrationResult:
         """Plan a new request exactly once, without pre-authorizing any step."""

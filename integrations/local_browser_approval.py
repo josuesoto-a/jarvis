@@ -53,6 +53,86 @@ def preview_browser_approval(
     )
 
 
+def preview_checkpoint_browser_approval(
+    orchestrator: Orchestrator,
+    projection: PendingPermissionUpdate,
+) -> LocalBrowserApproval | None:
+    """Preview one browser step whose URL is frozen in a checkpoint."""
+
+    if (
+        len(
+            projection
+            .pending_confirmation_steps
+        )
+        != 1
+    ):
+        return None
+
+    step_number = (
+        projection
+        .pending_confirmation_steps[0]
+    )
+
+    if (
+        type(step_number) is not int
+        or step_number < 1
+        or step_number
+        not in projection.confirmation_steps
+    ):
+        return None
+
+    try:
+        request_id = UUID(
+            projection.request_id
+        )
+    except (
+        TypeError,
+        ValueError,
+        AttributeError,
+    ):
+        return None
+
+    url = (
+        orchestrator
+        .preview_checkpoint_browser(
+            request_id,
+            step_number=step_number,
+        )
+    )
+
+    if url is None:
+        return None
+
+    return LocalBrowserApproval(
+        request_id=projection.request_id,
+        call_id=projection.call_id,
+        step_number=step_number,
+        url=url,
+    )
+
+
+def preview_browser_approval_v2(
+    orchestrator: Orchestrator,
+    projection: PendingPermissionUpdate,
+) -> LocalBrowserApproval | None:
+    """Support C1 literal URLs plus C2 frozen dependent URLs."""
+
+    literal = preview_browser_approval(
+        orchestrator,
+        projection,
+    )
+
+    if literal is not None:
+        return literal
+
+    return (
+        preview_checkpoint_browser_approval(
+            orchestrator,
+            projection,
+        )
+    )
+
+
 def format_browser_approval(
     approval: LocalBrowserApproval,
 ) -> str:
@@ -109,7 +189,30 @@ def approval_is_current(
     except (TypeError, ValueError, AttributeError):
         return False
 
+    literal_url = None
+
+    if approval.step_number == 1:
+        literal_url = (
+            orchestrator
+            .preview_single_browser(
+                request_id
+            )
+        )
+
+    if literal_url == approval.url:
+        return True
+
+    checkpoint_url = (
+        orchestrator
+        .preview_checkpoint_browser(
+            request_id,
+            step_number=(
+                approval.step_number
+            ),
+        )
+    )
+
     return (
-        orchestrator.preview_single_browser(request_id)
+        checkpoint_url
         == approval.url
     )

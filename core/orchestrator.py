@@ -312,14 +312,75 @@ class Orchestrator:
             ):
                 return None
 
-            # A checkpoint may contain only completed earlier work.
-            if any(
-                item.status
-                != ActionStatus.COMPLETED
-                or item.step_number
-                >= step_number
+            # The checkpoint must describe exactly the completed
+            # prefix of this same plan.
+            prefix_steps = tuple(
+                item
+                for item in plan.steps
+                if item.step_number < step_number
+            )
+
+            expected_numbers = tuple(
+                item.step_number
+                for item in prefix_steps
+            )
+
+            actual_numbers = tuple(
+                item.step_number
                 for item
                 in checkpoint.step_results
+            )
+
+            if actual_numbers != expected_numbers:
+                return None
+
+            if (
+                set(checkpoint.outputs)
+                != set(expected_numbers)
+            ):
+                return None
+
+            for (
+                plan_step,
+                result_item,
+            ) in zip(
+                prefix_steps,
+                checkpoint.step_results,
+                strict=True,
+            ):
+                if (
+                    result_item.status
+                    != ActionStatus.COMPLETED
+                    or result_item.capability
+                    != plan_step.capability
+                    or dict(
+                        checkpoint.outputs[
+                            plan_step.step_number
+                        ]
+                    )
+                    != dict(result_item.data)
+                ):
+                    return None
+
+            source_step = (
+                source_argument.step_number
+            )
+
+            output_key = (
+                source_argument.output_key
+            )
+
+            if (
+                type(source_step) is not int
+                or source_step >= step_number
+                or type(output_key) is not str
+                or not output_key
+                or source_step
+                not in checkpoint.outputs
+                or output_key
+                not in checkpoint.outputs[
+                    source_step
+                ]
             ):
                 return None
 
@@ -332,12 +393,22 @@ class Orchestrator:
             ):
                 return None
 
-            url = (
-                checkpoint
-                .resolved_arguments[
-                    "url"
+            source_url = (
+                checkpoint.outputs[
+                    source_step
+                ][
+                    output_key
                 ]
             )
+
+            if (
+                checkpoint
+                .resolved_arguments["url"]
+                != source_url
+            ):
+                return None
+
+            url = source_url
 
         return (
             self

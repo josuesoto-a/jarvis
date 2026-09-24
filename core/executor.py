@@ -67,6 +67,12 @@ class InvalidCapabilityResultError(
     """
 
 
+class InvalidExecutionCheckpointError(
+    ExecutorError
+):
+    """Raised when continuation state is inconsistent with its plan."""
+
+
 # ============================================================
 # STEP RESULT
 # ============================================================
@@ -381,6 +387,136 @@ class Executor:
     # EXECUTION
     # --------------------------------------------------------
 
+    def _validate_execution_checkpoint(
+        self,
+        *,
+        plan: ExecutionPlan,
+        checkpoint: ExecutionCheckpoint,
+    ) -> None:
+        """Verify that continuation state is a faithful plan prefix."""
+
+        matching_steps = tuple(
+            step
+            for step in plan.steps
+            if (
+                step.step_number
+                == checkpoint.next_step_number
+            )
+        )
+
+        if len(matching_steps) != 1:
+            raise InvalidExecutionCheckpointError(
+                "Checkpoint next step is not present exactly once."
+            )
+
+        next_step = matching_steps[0]
+
+        prefix_steps = tuple(
+            step
+            for step in plan.steps
+            if (
+                step.step_number
+                < checkpoint.next_step_number
+            )
+        )
+
+        expected_numbers = tuple(
+            step.step_number
+            for step in prefix_steps
+        )
+
+        actual_numbers = tuple(
+            result.step_number
+            for result
+            in checkpoint.step_results
+        )
+
+        if actual_numbers != expected_numbers:
+            raise InvalidExecutionCheckpointError(
+                "Checkpoint completed steps do not match "
+                "the exact plan prefix."
+            )
+
+        if (
+            set(checkpoint.outputs)
+            != set(expected_numbers)
+        ):
+            raise InvalidExecutionCheckpointError(
+                "Checkpoint outputs do not match "
+                "the completed plan prefix."
+            )
+
+        for (
+            plan_step,
+            result,
+        ) in zip(
+            prefix_steps,
+            checkpoint.step_results,
+            strict=True,
+        ):
+
+            if (
+                result.status
+                != ActionStatus.COMPLETED
+            ):
+                raise InvalidExecutionCheckpointError(
+                    "Checkpoint contains a non-completed "
+                    "prefix result."
+                )
+
+            if (
+                result.capability
+                != plan_step.capability
+            ):
+                raise InvalidExecutionCheckpointError(
+                    "Checkpoint capability does not match "
+                    "the plan prefix."
+                )
+
+            output = checkpoint.outputs[
+                plan_step.step_number
+            ]
+
+            if not isinstance(
+                output,
+                Mapping,
+            ):
+                raise InvalidExecutionCheckpointError(
+                    "Checkpoint output is not a mapping."
+                )
+
+            if (
+                dict(output)
+                != dict(result.data)
+            ):
+                raise InvalidExecutionCheckpointError(
+                    "Checkpoint output does not match "
+                    "its recorded step result."
+                )
+
+        try:
+            recomputed_arguments = (
+                self._resolve_arguments(
+                    step=next_step,
+                    outputs=checkpoint.outputs,
+                )
+            )
+
+        except ExecutorError as error:
+            raise InvalidExecutionCheckpointError(
+                "Checkpoint cannot resolve the pending step."
+            ) from error
+
+        if (
+            dict(checkpoint.resolved_arguments)
+            != recomputed_arguments
+        ):
+            raise InvalidExecutionCheckpointError(
+                "Checkpoint resolved arguments do not match "
+                "the outputs recorded by its plan prefix."
+            )
+
+
     def _execute_from_checkpoint_boundary(
         self,
         plan: ExecutionPlan,
@@ -437,18 +573,19 @@ class Executor:
             checkpoint_arguments = None
 
         else:
-            valid_steps = {
-                step.step_number
-                for step in plan.steps
-            }
+            try:
+                self._validate_execution_checkpoint(
+                    plan=plan,
+                    checkpoint=checkpoint,
+                )
 
-            if checkpoint.next_step_number not in valid_steps:
+            except InvalidExecutionCheckpointError as error:
                 return ExecutionReport(
                     request_id=plan.request_id,
                     status=ActionStatus.FAILED,
                     message=(
-                        "Execution checkpoint references "
-                        "an invalid step."
+                        "Invalid execution checkpoint: "
+                        f"{error}"
                     ),
                     validation_report=validation_report,
                     permission_report=permission_report,

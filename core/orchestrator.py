@@ -19,6 +19,7 @@ Planning, validation, permissions, runtime dispatch, dependency
 resolution, and execution remain separate concerns.
 """
 
+from copy import deepcopy
 from dataclasses import dataclass
 from threading import Lock
 from uuid import UUID
@@ -29,6 +30,7 @@ from core.contracts import (
     ExecutionPlan,
 )
 from core.executor import (
+    ExecutionCheckpoint,
     ExecutionReport,
     Executor,
 )
@@ -90,6 +92,7 @@ class OrchestrationResult:
 class _PendingExecution:
     result: OrchestrationResult
     confirmed_steps: frozenset[int]
+    checkpoint: ExecutionCheckpoint | None = None
 
 
 class Orchestrator:
@@ -262,7 +265,11 @@ class Orchestrator:
 
         plan = pending.result.plan
         assert plan is not None
-        return self._execute(plan, confirmed_steps=confirmed)
+        return self._execute(
+            plan,
+            confirmed_steps=confirmed,
+            checkpoint=pending.checkpoint,
+        )
 
     @staticmethod
     def _validate_confirmation_types(
@@ -306,15 +313,46 @@ class Orchestrator:
         plan: ExecutionPlan,
         *,
         confirmed_steps: frozenset[int],
+        checkpoint: ExecutionCheckpoint | None = None,
     ) -> OrchestrationResult:
         try:
-            report = self._executor.execute(plan, confirmed_steps=confirmed_steps)
+            if checkpoint is None:
+                report = self._executor.execute(
+                    plan,
+                    confirmed_steps=confirmed_steps,
+                )
+            else:
+                report = self._executor.execute(
+                    plan,
+                    confirmed_steps=confirmed_steps,
+                    checkpoint=checkpoint,
+                )
             if report.request_id != plan.request_id:
                 raise ValueError("Executor returned a report with a different request_id.")
-            if report.status == ActionStatus.WAITING_FOR_PERMISSION and report.step_results:
-                # The executor must wait before running any handler. Never replay
-                # a plan whose supposedly waiting report contains executed steps.
-                raise ValueError("A waiting plan must not contain executed steps.")
+            if (
+                report.status
+                == ActionStatus.WAITING_FOR_PERMISSION
+                and report.step_results
+                and report.checkpoint is None
+            ):
+                raise ValueError(
+                    "A waiting report with executed steps "
+                    "must contain a checkpoint."
+                )
+
+            if (
+                report.status
+                == ActionStatus.WAITING_FOR_PERMISSION
+                and report.checkpoint is not None
+                and (
+                    report.checkpoint.next_step_number
+                    not in report.pending_confirmation_steps
+                )
+            ):
+                raise ValueError(
+                    "Checkpoint does not match "
+                    "the pending confirmation."
+                )
         except Exception as error:
             return OrchestrationResult(
                 request_id=plan.request_id,
@@ -323,21 +361,39 @@ class Orchestrator:
                 error=f"Execution engine failed: {type(error).__name__}: {error}",
             )
 
+        pending_confirmation_steps: tuple[int, ...] = ()
+
+        if report.status == ActionStatus.WAITING_FOR_PERMISSION:
+            if report.pending_confirmation_steps:
+                pending_confirmation_steps = (
+                    report.pending_confirmation_steps
+                )
+            elif report.permission_report is not None:
+                pending_confirmation_steps = tuple(
+                    decision.step_number
+                    for decision
+                    in report.permission_report.confirmation_steps
+                    if decision.step_number not in confirmed_steps
+                )
+
         result = OrchestrationResult(
             request_id=plan.request_id,
             status=report.status,
             plan=plan,
             execution_report=report,
-            pending_confirmation_steps=tuple(
-                decision.step_number
-                for decision in report.permission_report.confirmation_steps
-                if decision.step_number not in confirmed_steps
-            ) if (
-                report.status == ActionStatus.WAITING_FOR_PERMISSION
-                and report.permission_report is not None
-            ) else (),
+            pending_confirmation_steps=(
+                pending_confirmation_steps
+            ),
         )
         if result.waiting_for_permission:
             with self._lock:
-                self._pending[plan.request_id] = _PendingExecution(result, confirmed_steps)
+                self._pending[plan.request_id] = _PendingExecution(
+                    result,
+                    confirmed_steps,
+                    (
+                        deepcopy(report.checkpoint)
+                        if report.checkpoint is not None
+                        else None
+                    ),
+                )
         return result

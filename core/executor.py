@@ -15,6 +15,7 @@ Safety boundaries:
 """
 
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -25,6 +26,7 @@ from core.contracts import (
     ExecutionArgument,
     ExecutionPlan,
     ExecutionStep,
+    RiskLevel,
 )
 from core.permissions import (
     PermissionEngine,
@@ -92,6 +94,32 @@ class StepExecutionResult:
 
 
 # ============================================================
+# EXECUTION CHECKPOINT
+# ============================================================
+
+@dataclass(frozen=True, slots=True)
+class ExecutionCheckpoint:
+    """Internal continuation state. This is never permission."""
+
+    next_step_number: int
+
+    outputs: Mapping[
+        int,
+        Mapping[str, Any],
+    ]
+
+    step_results: tuple[
+        StepExecutionResult,
+        ...
+    ]
+
+    resolved_arguments: Mapping[
+        str,
+        Any,
+    ]
+
+
+# ============================================================
 # EXECUTION REPORT
 # ============================================================
 
@@ -121,6 +149,13 @@ class ExecutionReport:
         PermissionReport
         | None
     ) = None
+
+    checkpoint: ExecutionCheckpoint | None = None
+
+    pending_confirmation_steps: tuple[
+        int,
+        ...
+    ] = ()
 
 
     @property
@@ -346,11 +381,264 @@ class Executor:
     # EXECUTION
     # --------------------------------------------------------
 
+    def _execute_from_checkpoint_boundary(
+        self,
+        plan: ExecutionPlan,
+        *,
+        confirmed_steps: frozenset[int],
+        validation_report: PlanValidationReport,
+        permission_report: PermissionReport,
+        checkpoint: ExecutionCheckpoint | None,
+    ) -> ExecutionReport:
+        """
+        Execute the narrow C2A flow.
+
+        This path is entered only for one low-risk browser confirmation
+        whose concrete arguments depend on earlier step output, or when
+        resuming the checkpoint produced by that path.
+        """
+
+        missing_runtimes = tuple(
+            step.capability
+            for step in plan.steps
+            if not self._runtime_registry.has(
+                step.capability
+            )
+        )
+
+        if missing_runtimes:
+            return ExecutionReport(
+                request_id=plan.request_id,
+                status=ActionStatus.BLOCKED,
+                message=(
+                    "Missing runtime implementations: "
+                    f"{missing_runtimes}"
+                ),
+                validation_report=validation_report,
+                permission_report=permission_report,
+            )
+
+        decisions = {
+            decision.step_number: decision
+            for decision in permission_report.decisions
+        }
+
+        if checkpoint is None:
+            outputs: dict[
+                int,
+                Mapping[str, Any],
+            ] = {}
+
+            step_results: list[
+                StepExecutionResult
+            ] = []
+
+            next_step = plan.steps[0].step_number
+            checkpoint_arguments = None
+
+        else:
+            valid_steps = {
+                step.step_number
+                for step in plan.steps
+            }
+
+            if checkpoint.next_step_number not in valid_steps:
+                return ExecutionReport(
+                    request_id=plan.request_id,
+                    status=ActionStatus.FAILED,
+                    message=(
+                        "Execution checkpoint references "
+                        "an invalid step."
+                    ),
+                    validation_report=validation_report,
+                    permission_report=permission_report,
+                )
+
+            outputs = deepcopy(
+                dict(checkpoint.outputs)
+            )
+
+            step_results = deepcopy(
+                list(checkpoint.step_results)
+            )
+
+            next_step = checkpoint.next_step_number
+
+            checkpoint_arguments = deepcopy(
+                dict(
+                    checkpoint.resolved_arguments
+                )
+            )
+
+        for step in plan.steps:
+
+            if step.step_number < next_step:
+                continue
+
+            try:
+                if (
+                    checkpoint_arguments is not None
+                    and step.step_number == next_step
+                ):
+                    resolved_arguments = (
+                        checkpoint_arguments
+                    )
+                else:
+                    resolved_arguments = (
+                        self._resolve_arguments(
+                            step=step,
+                            outputs=outputs,
+                        )
+                    )
+
+            except ExecutorError as error:
+                step_results.append(
+                    StepExecutionResult(
+                        step_number=step.step_number,
+                        capability=step.capability,
+                        status=ActionStatus.FAILED,
+                        error=str(error),
+                    )
+                )
+
+                return ExecutionReport(
+                    request_id=plan.request_id,
+                    status=ActionStatus.FAILED,
+                    step_results=tuple(step_results),
+                    message=(
+                        "Execution failed while "
+                        "resolving dependencies."
+                    ),
+                    validation_report=validation_report,
+                    permission_report=permission_report,
+                )
+
+            decision = decisions[
+                step.step_number
+            ]
+
+            if (
+                decision.requires_confirmation
+                and step.step_number not in confirmed_steps
+            ):
+                try:
+                    continuation = ExecutionCheckpoint(
+                        next_step_number=step.step_number,
+                        outputs=deepcopy(outputs),
+                        step_results=deepcopy(
+                            tuple(step_results)
+                        ),
+                        resolved_arguments=deepcopy(
+                            resolved_arguments
+                        ),
+                    )
+                except Exception as error:
+                    return ExecutionReport(
+                        request_id=plan.request_id,
+                        status=ActionStatus.FAILED,
+                        step_results=tuple(step_results),
+                        message=(
+                            "Failed to create execution "
+                            "checkpoint: "
+                            f"{type(error).__name__}: {error}"
+                        ),
+                        validation_report=validation_report,
+                        permission_report=permission_report,
+                    )
+
+                return ExecutionReport(
+                    request_id=plan.request_id,
+                    status=(
+                        ActionStatus
+                        .WAITING_FOR_PERMISSION
+                    ),
+                    step_results=tuple(step_results),
+                    message=(
+                        "Execution requires confirmation "
+                        f"for step: {step.step_number}"
+                    ),
+                    validation_report=validation_report,
+                    permission_report=permission_report,
+                    checkpoint=continuation,
+                    pending_confirmation_steps=(
+                        step.step_number,
+                    ),
+                )
+
+            checkpoint_arguments = None
+
+            handler = self._runtime_registry.get(
+                step.capability
+            )
+
+            try:
+                raw_result = handler(
+                    resolved_arguments
+                )
+
+                result = (
+                    self._validate_handler_result(
+                        step=step,
+                        result=raw_result,
+                    )
+                )
+
+            except Exception as error:
+                step_results.append(
+                    StepExecutionResult(
+                        step_number=step.step_number,
+                        capability=step.capability,
+                        status=ActionStatus.FAILED,
+                        error=(
+                            f"{type(error).__name__}: "
+                            f"{error}"
+                        ),
+                    )
+                )
+
+                return ExecutionReport(
+                    request_id=plan.request_id,
+                    status=ActionStatus.FAILED,
+                    step_results=tuple(step_results),
+                    message=(
+                        f"Execution failed at "
+                        f"step {step.step_number}."
+                    ),
+                    validation_report=validation_report,
+                    permission_report=permission_report,
+                )
+
+            outputs[
+                step.step_number
+            ] = result
+
+            step_results.append(
+                StepExecutionResult(
+                    step_number=step.step_number,
+                    capability=step.capability,
+                    status=ActionStatus.COMPLETED,
+                    data=result,
+                )
+            )
+
+        return ExecutionReport(
+            request_id=plan.request_id,
+            status=ActionStatus.COMPLETED,
+            step_results=tuple(step_results),
+            message=(
+                "Execution plan completed successfully."
+            ),
+            validation_report=validation_report,
+            permission_report=permission_report,
+        )
+
+
     def execute(
         self,
         plan: ExecutionPlan,
         *,
         confirmed_steps: frozenset[int] = frozenset(),
+        checkpoint: ExecutionCheckpoint | None = None,
     ) -> ExecutionReport:
         """
         Execute one complete plan.
@@ -434,6 +722,48 @@ class Executor:
             )
         )
 
+
+        # C2A is intentionally narrow:
+        # exactly one LOW browser confirmation may execute
+        # automatic prerequisite steps when its concrete target
+        # depends on an earlier step output.
+        use_checkpoint_flow = (
+            checkpoint is not None
+        )
+
+        if (
+            checkpoint is None
+            and len(missing_confirmations) == 1
+        ):
+            pending_number = (
+                missing_confirmations[0]
+            )
+
+            pending_step = next(
+                step
+                for step in plan.steps
+                if step.step_number == pending_number
+            )
+
+            use_checkpoint_flow = (
+                pending_step.capability == "browser"
+                and pending_step.risk == RiskLevel.LOW
+                and any(
+                    argument.source
+                    == ArgumentSource.STEP_OUTPUT
+                    for argument
+                    in pending_step.arguments.values()
+                )
+            )
+
+        if use_checkpoint_flow:
+            return self._execute_from_checkpoint_boundary(
+                plan,
+                confirmed_steps=confirmed_steps,
+                validation_report=validation_report,
+                permission_report=permission_report,
+                checkpoint=checkpoint,
+            )
 
         if missing_confirmations:
 

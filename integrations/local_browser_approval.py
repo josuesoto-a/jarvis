@@ -14,7 +14,6 @@ does not belong to the core ApprovalSubject.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -24,94 +23,55 @@ from core.approval import (
 )
 from core.contracts import RiskLevel
 from core.orchestrator import Orchestrator
+from integrations.local_approval import (
+    LocalApproval,
+    approval_session_matches,
+)
 from integrations.openai_live import (
     PendingPermissionUpdate,
 )
 
 
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class LocalBrowserApproval:
-    """Live/session wrapper around one generic approval subject."""
+class LocalBrowserApproval(
+    LocalApproval
+):
+    """Browser compatibility view over the generic local envelope."""
 
-    call_id: str
-    subject: ApprovalSubject
-
-    def __post_init__(
-        self,
-    ) -> None:
-
-        if (
-            type(self.call_id) is not str
-            or not self.call_id
-        ):
-            raise ValueError(
-                "call_id must be a nonempty string"
-            )
-
-        arguments = self.subject.arguments
-
-        if (
-            self.subject.capability
-            != "browser"
-            or self.subject.risk
-            != RiskLevel.LOW
-            or set(arguments)
-            != {"url"}
-            or type(arguments["url"])
-            is not str
-        ):
-            raise ValueError(
-                "LocalBrowserApproval requires "
-                "one low-risk browser URL subject."
-            )
-
-    @property
-    def request_id(
-        self,
-    ) -> str:
-
-        return str(
-            self.subject.request_id
-        )
-
-    @property
-    def step_number(
-        self,
-    ) -> int:
-
-        return (
-            self.subject.step_number
-        )
+    __slots__ = ()
 
     @property
     def url(
         self,
     ) -> str:
+        """Exact browser URL retained for the existing public API."""
 
-        value = (
-            self.subject.arguments[
-                "url"
-            ]
+        value = self.arguments.get(
+            "url"
         )
 
-        assert isinstance(
-            value,
-            str,
-        )
+        if type(value) is not str:
+            raise ValueError(
+                "Browser approval does not contain a valid URL."
+            )
 
         return value
 
-    @property
-    def fingerprint(
-        self,
-    ) -> str:
 
-        return (
-            self.subject.fingerprint
-        )
+def _is_browser_approval(
+    approval: LocalApproval,
+) -> bool:
+    arguments = approval.arguments
+
+    return (
+        approval.capability
+        == "browser"
+        and approval.risk
+        == RiskLevel.LOW
+        and set(arguments)
+        == {"url"}
+        and type(arguments["url"])
+        is str
+    )
 
 
 def _make_browser_approval(
@@ -134,10 +94,17 @@ def _make_browser_approval(
             },
         )
 
-        return LocalBrowserApproval(
+        approval = LocalBrowserApproval(
             call_id=projection.call_id,
             subject=subject,
         )
+
+        if not _is_browser_approval(
+            approval
+        ):
+            return None
+
+        return approval
 
     except (
         ApprovalContractError,
@@ -280,8 +247,18 @@ def format_browser_approval(
 ) -> str:
     """Render the existing browser-specific local human prompt."""
 
+    if not _is_browser_approval(
+        approval
+    ):
+        raise ValueError(
+            "Browser renderer received a non-browser approval."
+        )
+
+    url = approval.arguments["url"]
+    assert isinstance(url, str)
+
     hostname = urlsplit(
-        approval.url
+        url
     ).hostname
 
     return "\n".join(
@@ -302,7 +279,7 @@ def format_browser_approval(
             f"Dominio: {hostname}",
             (
                 "URL EXACTA: "
-                f"{approval.url}"
+                f"{url}"
             ),
             "",
             (
@@ -331,34 +308,14 @@ def approval_is_current(
     Orchestrator remains the source of current pending state.
     """
 
-    snapshot = (
-        action_session.snapshot()
-    )
-
-    action = snapshot.action
-
-    if action is None:
+    if not _is_browser_approval(
+        approval
+    ):
         return False
 
-    pending = (
-        action.pending_permission
-    )
-
-    if (
-        action.request_id
-        != approval.request_id
-        or action.call_id
-        != approval.call_id
-        or pending is None
-        or pending.request_id
-        != approval.request_id
-        or pending.call_id
-        != approval.call_id
-        or pending
-        .pending_confirmation_steps
-        != (
-            approval.step_number,
-        )
+    if not approval_session_matches(
+        action_session,
+        approval,
     ):
         return False
 

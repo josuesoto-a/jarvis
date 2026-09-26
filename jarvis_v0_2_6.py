@@ -12,10 +12,8 @@ from websockets.exceptions import ConnectionClosedOK
 from integrations.action_result_display import (
     extract_copyable_urls,
 )
-from integrations.local_browser_approval import (
-    approval_is_current,
-    format_browser_approval,
-    preview_browser_approval_v2,
+from integrations.local_approval_defaults import (
+    build_default_local_approval_registry,
 )
 
 from core.action_worker import ActionWorker
@@ -31,6 +29,11 @@ from integrations.openai_live_voice import (
 )
 from integrations.openai_live_voice_session import (
     RearmingVoiceActionSession,
+)
+
+
+LOCAL_APPROVAL_REGISTRY = (
+    build_default_local_approval_registry()
 )
 
 
@@ -460,14 +463,14 @@ def action_poller(
                         )
                     )
 
-                    approval = preview_browser_approval_v2(
+                    approval = LOCAL_APPROVAL_REGISTRY.resolve(
                         orchestrator,
                         projection,
                     )
 
                     if approval is not None:
                         console_message(
-                            format_browser_approval(approval)
+                            LOCAL_APPROVAL_REGISTRY.render(approval)
                         )
 
                         try:
@@ -1067,7 +1070,7 @@ def main() -> None:
                                 )
                                 continue
 
-                            if not approval_is_current(
+                            if not LOCAL_APPROVAL_REGISTRY.is_current(
                                 app.orchestrator,
                                 action_session,
                                 approval,

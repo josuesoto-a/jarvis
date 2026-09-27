@@ -141,7 +141,7 @@ class PlannerArgumentDraft(BaseModel):
 
     source: ArgumentSource
 
-    value: str | None
+    value: str | list[str] | None
 
     step_number: int | None
 
@@ -508,7 +508,10 @@ class Planner:
 
             if (
                 draft.value is None
-                or not draft.value.strip()
+                or (
+                    type(draft.value) is str
+                    and not draft.value.strip()
+                )
             ):
                 raise PlannerError(
                     f"Literal argument "
@@ -528,13 +531,20 @@ class Planner:
 
             try:
 
-                argument = (
-                    ExecutionArgument.literal(
-                        draft.value
+                if type(draft.value) is list:
+                    argument = (
+                        ExecutionArgument.literal_string_sequence(
+                            draft.value
+                        )
                     )
-                )
+                else:
+                    argument = (
+                        ExecutionArgument.literal(
+                            draft.value
+                        )
+                    )
 
-            except ValueError as error:
+            except (TypeError, ValueError) as error:
 
                 raise PlannerError(
                     f"Invalid argument "

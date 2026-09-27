@@ -104,7 +104,7 @@ class ExecutionArgument:
 
     source: ArgumentSource
 
-    value: str | None = None
+    value: str | tuple[str, ...] | None = None
 
     step_number: int | None = None
 
@@ -113,11 +113,35 @@ class ExecutionArgument:
 
     def __post_init__(self) -> None:
 
-        # Literals are strings by contract, not arbitrary Python objects.
-        # Check before calling strip: duck-typed containers could otherwise
-        # retain mutable nested values inside a frozen argument.
-        if self.value is not None and type(self.value) is not str:
-            raise TypeError("ExecutionArgument.value must be a plain string or None")
+        # Literal values remain deliberately narrow: either the original
+        # scalar string or one ordered sequence of plain strings.
+        # Lists are detached into tuples so a frozen argument cannot retain a
+        # caller-owned mutable container.
+        value = self.value
+        if type(value) is list:
+            value = tuple(value)
+            object.__setattr__(self, "value", value)
+
+        if (
+            value is not None
+            and type(value) is not str
+            and type(value) is not tuple
+        ):
+            raise TypeError(
+                "ExecutionArgument.value must be a plain string, "
+                "an ordered string sequence, or None"
+            )
+
+        if type(value) is tuple:
+            if any(type(item) is not str for item in value):
+                raise TypeError(
+                    "Structured execution arguments must contain only "
+                    "plain strings"
+                )
+            if any("\x00" in item for item in value):
+                raise ValueError(
+                    "Structured execution arguments cannot contain NUL"
+                )
         if self.output_key is not None and type(self.output_key) is not str:
             raise TypeError("output_key must be a plain string or None")
         if self.step_number is not None and type(self.step_number) is not int:
@@ -127,7 +151,10 @@ class ExecutionArgument:
 
         if self.source == ArgumentSource.LITERAL:
 
-            if self.value is None or not self.value.strip():
+            if self.value is None or (
+                type(self.value) is str
+                and not self.value.strip()
+            ):
                 raise ValueError(
                     "Literal execution arguments require "
                     "a non-empty value."
@@ -190,6 +217,28 @@ class ExecutionArgument:
         return cls(
             source=ArgumentSource.LITERAL,
             value=value.strip(),
+        )
+
+
+    @classmethod
+    def literal_string_sequence(
+        cls,
+        value: list[str] | tuple[str, ...],
+    ) -> "ExecutionArgument":
+        """Create one immutable ordered string-sequence literal.
+
+        This is intentionally not an arbitrary JSON literal. It exists for
+        structured values and preserves element order and contents.
+        """
+
+        if type(value) not in {list, tuple}:
+            raise TypeError(
+                "Structured literal value must be a list or tuple"
+            )
+
+        return cls(
+            source=ArgumentSource.LITERAL,
+            value=tuple(value),
         )
 
 

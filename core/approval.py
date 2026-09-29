@@ -22,7 +22,7 @@ import math
 from typing import Any
 from uuid import UUID
 
-from core.contracts import RiskLevel
+from core.contracts import PermissionMode, RiskLevel
 
 
 APPROVAL_SUBJECT_VERSION = 1
@@ -347,3 +347,42 @@ class ApprovalSubject:
             self.fingerprint,
             other.fingerprint,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PendingApprovalTarget:
+    '''One exact prepared action currently awaiting human authorization.
+
+    prepared_target is an opaque, capability-owned object. Capability
+    preparers must provide a deeply immutable target and must project every
+    prepared-target property that can materially change execution semantics
+    into subject.arguments. This envelope deliberately does not prepare,
+    normalize, copy, serialize, validate, or dispatch that target.
+
+    The subject fingerprint identifies the pending action and protects its
+    integrity. It is not authorization, and this contract stores no approval
+    decision or other authority state.
+    '''
+
+    subject: ApprovalSubject
+    effective_permission: PermissionMode
+    prepared_target: object
+
+    def __post_init__(self) -> None:
+        if not isinstance(
+            self.subject,
+            ApprovalSubject,
+        ):
+            raise TypeError(
+                'subject must be an ApprovalSubject'
+            )
+
+        if (
+            self.effective_permission
+            is not PermissionMode
+            .CONFIRM_BEFORE_EXECUTION
+        ):
+            raise ApprovalContractError(
+                'Pending approval requires '
+                'CONFIRM_BEFORE_EXECUTION.'
+            )

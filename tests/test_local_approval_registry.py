@@ -1,12 +1,12 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
-from core.approval import ApprovalSubject
-from core.contracts import RiskLevel
+from core.approval import ApprovalSubject, PendingApprovalTarget
+from core.contracts import PermissionMode, RiskLevel
 from integrations.local_approval import LocalApproval
 from integrations.local_approval_registry import (
-    AmbiguousLocalApprovalError,
     InvalidLocalApprovalAdapterError,
     LocalApprovalAdapter,
     LocalApprovalAdapterAlreadyRegisteredError,
@@ -25,8 +25,8 @@ def approval(
         }
         if capability == "browser"
         else {
-            "command":
-                "echo hello"
+            "example":
+                "value"
         }
     )
 
@@ -54,7 +54,7 @@ def adapter(
         preview=(
             preview
             if preview is not None
-            else lambda orchestrator, projection:
+            else lambda projection, pending_target:
                 None
         ),
         render=(
@@ -128,7 +128,7 @@ def test_unknown_adapter_rejected():
         LocalApprovalAdapterNotFoundError
     ):
         registry.get(
-            "terminal"
+            "future_capability"
         )
 
 
@@ -138,7 +138,7 @@ def test_registry_names_are_deterministic():
     )
 
     registry.register(
-        adapter("terminal")
+        adapter("future_capability")
     )
 
     registry.register(
@@ -147,131 +147,47 @@ def test_registry_names_are_deterministic():
 
     assert registry.names() == (
         "browser",
-        "terminal",
+        "future_capability",
     )
 
     assert len(registry) == 2
 
 
-def test_resolve_returns_single_matching_adapter():
-    target = approval(
-        "browser"
+def resolve_inputs(item):
+    target = PendingApprovalTarget(
+        subject=item.subject,
+        effective_permission=PermissionMode.CONFIRM_BEFORE_EXECUTION,
+        prepared_target=item.arguments.get("url", "opaque"),
     )
-
-    registry = (
-        LocalApprovalAdapterRegistry()
+    projection = SimpleNamespace(
+        request_id=item.request_id, call_id=item.call_id,
+        confirmation_steps=(item.step_number,),
+        pending_confirmation_steps=(item.step_number,),
     )
-
-    registry.register(
-        adapter(
-            "browser",
-            preview=(
-                lambda orchestrator, projection:
-                    target
-            ),
-        )
-    )
-
-    registry.register(
-        adapter(
-            "terminal"
-        )
-    )
-
-    resolved = registry.resolve(
-        object(),
-        object(),
-    )
-
-    assert resolved is target
+    engine = SimpleNamespace(preview_pending_approval=lambda *a, **k: target)
+    return engine, projection
 
 
-def test_resolve_returns_none_when_no_adapter_matches():
-    registry = (
-        LocalApprovalAdapterRegistry()
-    )
-
-    registry.register(
-        adapter("browser")
-    )
-
-    assert (
-        registry.resolve(
-            object(),
-            object(),
-        )
-        is None
-    )
+def test_resolve_returns_selected_adapter_approval():
+    item = approval()
+    registry = LocalApprovalAdapterRegistry()
+    registry.register(adapter(preview=lambda projection, pending_target: item))
+    assert registry.resolve(*resolve_inputs(item)) is item
 
 
-def test_resolve_fails_closed_on_multiple_matches():
-    browser_target = approval(
-        "browser"
-    )
-
-    terminal_target = approval(
-        "terminal"
-    )
-
-    registry = (
-        LocalApprovalAdapterRegistry()
-    )
-
-    registry.register(
-        adapter(
-            "browser",
-            preview=(
-                lambda orchestrator, projection:
-                    browser_target
-            ),
-        )
-    )
-
-    registry.register(
-        adapter(
-            "terminal",
-            preview=(
-                lambda orchestrator, projection:
-                    terminal_target
-            ),
-        )
-    )
-
-    with pytest.raises(
-        AmbiguousLocalApprovalError
-    ):
-        registry.resolve(
-            object(),
-            object(),
-        )
+def test_resolve_returns_none_when_selected_adapter_declines():
+    registry = LocalApprovalAdapterRegistry()
+    registry.register(adapter())
+    assert registry.resolve(*resolve_inputs(approval())) is None
 
 
 def test_adapter_cannot_claim_different_capability():
-    terminal_target = approval(
-        "terminal"
-    )
-
-    registry = (
-        LocalApprovalAdapterRegistry()
-    )
-
-    registry.register(
-        adapter(
-            "browser",
-            preview=(
-                lambda orchestrator, projection:
-                    terminal_target
-            ),
-        )
-    )
-
-    with pytest.raises(
-        InvalidLocalApprovalAdapterError
-    ):
-        registry.resolve(
-            object(),
-            object(),
-        )
+    registry = LocalApprovalAdapterRegistry()
+    registry.register(adapter(
+        preview=lambda projection, pending_target: approval("future_capability"),
+    ))
+    with pytest.raises(InvalidLocalApprovalAdapterError):
+        registry.resolve(*resolve_inputs(approval()))
 
 
 def test_render_routes_by_subject_capability():
@@ -402,7 +318,7 @@ def test_non_callable_handler_rejected(
 ):
     values = {
         "preview":
-            lambda orchestrator, projection:
+            lambda projection, pending_target:
                 None,
         "render":
             lambda item:

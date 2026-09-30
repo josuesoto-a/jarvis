@@ -4,7 +4,7 @@ from integrations.local_approval_defaults import (
 from integrations.local_browser_approval import (
     approval_is_current,
     format_browser_approval,
-    preview_browser_approval_v2,
+    preview_browser_target,
 )
 
 
@@ -29,7 +29,7 @@ def test_default_browser_adapter_uses_existing_authority_surface():
 
     assert (
         adapter.preview
-        is preview_browser_approval_v2
+        is preview_browser_target
     )
 
     assert (

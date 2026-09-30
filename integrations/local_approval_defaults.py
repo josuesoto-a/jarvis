@@ -13,7 +13,7 @@ from integrations.local_approval_registry import (
 from integrations.local_browser_approval import (
     approval_is_current,
     format_browser_approval,
-    preview_browser_approval_v2,
+    preview_browser_target,
 )
 
 
@@ -26,7 +26,7 @@ def build_default_local_approval_registry(
     registry.register(
         LocalApprovalAdapter(
             capability="browser",
-            preview=preview_browser_approval_v2,
+            preview=preview_browser_target,
             render=format_browser_approval,
             is_current=approval_is_current,
         )

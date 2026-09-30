@@ -76,7 +76,7 @@ def _stored_browser_approval(
     orchestrator: Orchestrator,
     projection: PendingPermissionUpdate,
 ) -> LocalBrowserApproval | None:
-    """Retain stored capability identity; add only interaction metadata."""
+    """Compatibility reader; production preview receives its target directly."""
     if len(projection.pending_confirmation_steps) != 1:
         return None
     step_number = projection.pending_confirmation_steps[0]
@@ -89,7 +89,7 @@ def _stored_browser_approval(
                 or target.subject.request_id != request_id
                 or target.subject.step_number != step_number):
             return None
-        return LocalBrowserApproval(call_id=projection.call_id, subject=target.subject)
+        return preview_browser_target(projection, target)
     except (TypeError, ValueError, AttributeError):
         return None
 
@@ -103,6 +103,21 @@ def _is_stored_browser_target(target: object) -> bool:
         and type(target.prepared_target) is str
         and target.subject.arguments == {"url": target.prepared_target}
     )
+
+
+def preview_browser_target(
+    projection: PendingPermissionUpdate,
+    pending_target: PendingApprovalTarget,
+) -> LocalBrowserApproval | None:
+    """Present a supplied browser target without fetching or preparing it."""
+    if not _is_stored_browser_target(pending_target):
+        return None
+    try:
+        return LocalBrowserApproval(
+            call_id=projection.call_id, subject=pending_target.subject,
+        )
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 
 def preview_browser_approval(

@@ -2,7 +2,7 @@
 
 Each adapter owns capability-specific behavior:
 
-- preview: resolve an exact LocalApproval from current pending state
+- preview: present the supplied stored PendingApprovalTarget
 - render: produce the human-readable approval prompt
 - is_current: revalidate the exact target immediately before confirmation
 
@@ -14,6 +14,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable
+from uuid import UUID
+
+from core.approval import PendingApprovalTarget
 
 from core.registry import (
     canonicalize_capability_name,
@@ -24,7 +27,7 @@ from integrations.local_approval import (
 
 
 PreviewHandler = Callable[
-    [Any, Any],
+    [Any, PendingApprovalTarget],
     LocalApproval | None,
 ]
 
@@ -66,7 +69,7 @@ class LocalApprovalAdapterNotFoundError(
 class AmbiguousLocalApprovalError(
     LocalApprovalRegistryError
 ):
-    """More than one adapter claimed the same pending approval."""
+    """Compatibility-only error from the former adapter discovery contract."""
 
 
 @dataclass(
@@ -224,63 +227,57 @@ class LocalApprovalAdapterRegistry:
         orchestrator,
         projection,
     ) -> LocalApproval | None:
-        """Ask registered adapters who owns this pending approval.
+        """Present one stored target through its registered capability adapter.
 
-        Zero matches means the pending action has no supported local surface.
-        More than one match fails closed as an architectural ambiguity.
+        Preview is advisory: routing neither grants permission nor reserves
+        pending state. Unsupported coordinates or presentation return None.
         """
-
-        matches: list[
-            LocalApproval
-        ] = []
-
-        for name in self.names():
-
-            adapter = self._adapters[
-                name
-            ]
-
-            approval = adapter.preview(
-                orchestrator,
-                projection,
-            )
-
-            if approval is None:
-                continue
-
-            if not isinstance(
-                approval,
-                LocalApproval,
-            ):
-                raise InvalidLocalApprovalAdapterError(
-                    f"Adapter {name!r} returned "
-                    "a non-LocalApproval value."
-                )
-
+        try:
+            if len(projection.pending_confirmation_steps) != 1:
+                return None
+            step_number = projection.pending_confirmation_steps[0]
             if (
-                approval.capability
-                != name
+                type(step_number) is not int
+                or step_number < 1
+                or step_number not in projection.confirmation_steps
             ):
-                raise InvalidLocalApprovalAdapterError(
-                    f"Adapter {name!r} returned "
-                    f"approval for "
-                    f"{approval.capability!r}."
-                )
-
-            matches.append(
-                approval
-            )
-
-        if len(matches) > 1:
-            raise AmbiguousLocalApprovalError(
-                "Multiple local approval adapters "
-                "claimed the same pending action."
-            )
-
-        if not matches:
+                return None
+            request_id = UUID(projection.request_id)
+        except (TypeError, ValueError, AttributeError):
             return None
 
-        return matches[0]
+        target = orchestrator.preview_pending_approval(
+            request_id, step_number=step_number,
+        )
+        if (
+            not isinstance(target, PendingApprovalTarget)
+            or target.subject.request_id != request_id
+            or target.subject.step_number != step_number
+        ):
+            return None
+
+        try:
+            adapter = self.get(target.subject.capability)
+        except LocalApprovalAdapterNotFoundError:
+            return None
+
+        approval = adapter.preview(projection, target)
+        if approval is None:
+            return None
+        if not isinstance(approval, LocalApproval):
+            raise InvalidLocalApprovalAdapterError(
+                f"Adapter {adapter.capability!r} returned a non-LocalApproval value."
+            )
+        if (
+            approval.subject is not target.subject
+            or approval.call_id != projection.call_id
+            or approval.subject.capability != adapter.capability
+        ):
+            raise InvalidLocalApprovalAdapterError(
+                f"Adapter {adapter.capability!r} returned an approval "
+                "that does not retain the stored subject and projection call_id."
+            )
+        return approval
 
     def render(
         self,
@@ -296,7 +293,7 @@ class LocalApprovalAdapterRegistry:
             )
 
         adapter = self.get(
-            approval.capability
+            approval.subject.capability
         )
 
         rendered = adapter.render(
@@ -329,9 +326,10 @@ class LocalApprovalAdapterRegistry:
                 "approval must be a LocalApproval"
             )
 
-        adapter = self.get(
-            approval.capability
-        )
+        try:
+            adapter = self.get(approval.subject.capability)
+        except LocalApprovalAdapterNotFoundError:
+            return False
 
         result = adapter.is_current(
             orchestrator,

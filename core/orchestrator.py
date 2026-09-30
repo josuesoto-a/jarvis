@@ -32,6 +32,7 @@ from core.contracts import (
     ActionRequest,
     ActionStatus,
     ExecutionPlan,
+    PermissionMode,
 )
 from core.executor import (
     ExecutionCheckpoint,
@@ -130,297 +131,49 @@ class Orchestrator:
         # Protect admission and atomic consumption, never external execution.
         self._lock = Lock()
 
-    @staticmethod
-    def _validate_browser_preview_url(
-        url: object,
-    ) -> str | None:
-        """Validate one browser URL before showing it for local approval."""
-
-        from unicodedata import category
-        from urllib.parse import urlsplit
-
-        if type(url) is not str:
-            return None
-
-        if (
-            not url
-            or len(url) > 2048
-            or "\\" in url
-            or any(
-                character.isspace()
-                or category(character) in {"Cc", "Cf"}
-                for character in url
-            )
-        ):
-            return None
-
-        try:
-            parsed = urlsplit(url)
-
-            if (
-                parsed.scheme not in {"http", "https"}
-                or not parsed.hostname
-                or parsed.username is not None
-                or parsed.password is not None
-            ):
-                return None
-
-            # Also rejects malformed numeric ports.
-            _ = parsed.port
-
-        except ValueError:
-            return None
-
-        return url
-
-    def preview_single_browser(
-        self,
-        request_id: UUID,
-    ) -> str | None:
-        """Preview the original C1 literal one-step browser action."""
-
-        from core.contracts import (
-            ArgumentSource,
-            RiskLevel,
-        )
-
-        with self._lock:
-            pending = self._pending.get(
-                request_id
-            )
-
-            if pending is None:
-                return None
-
-            result = pending.result
-            plan = result.plan
-
-            if (
-                result.status
-                != ActionStatus.WAITING_FOR_PERMISSION
-                or result.pending_confirmation_steps
-                != (1,)
-                or plan is None
-                or len(plan.steps) != 1
-                or plan.overall_risk
-                != RiskLevel.LOW
-            ):
-                return None
-
-            step = plan.steps[0]
-
-            if (
-                step.step_number != 1
-                or step.capability != "browser"
-                or step.risk != RiskLevel.LOW
-                or set(step.arguments) != {"url"}
-            ):
-                return None
-
-            argument = step.arguments[
-                "url"
-            ]
-
-            if (
-                argument.source
-                != ArgumentSource.LITERAL
-            ):
-                return None
-
-            url = argument.value
-
-        return (
-            self
-            ._validate_browser_preview_url(
-                url
-            )
-        )
-
-    def preview_checkpoint_browser(
+    def preview_pending_approval(
         self,
         request_id: UUID,
         *,
         step_number: int,
-    ) -> str | None:
-        """Preview an exact browser URL frozen in a private checkpoint.
-
-        This is the C2 approval surface. It reads only Orchestrator's
-        private continuation checkpoint, never the caller-visible copy.
-        It grants no permission and executes no capability.
-        """
-
-        from core.contracts import (
-            ArgumentSource,
-            RiskLevel,
-        )
-
-        if (
-            type(step_number) is not int
-            or step_number < 1
-        ):
+    ) -> PendingApprovalTarget | None:
+        """Read the stored immutable identity; never prepare or authorize."""
+        if not isinstance(request_id, UUID) or type(step_number) is not int or step_number < 1:
             return None
-
         with self._lock:
-            pending = self._pending.get(
-                request_id
-            )
-
+            pending = self._pending.get(request_id)
             if pending is None:
                 return None
-
-            result = pending.result
-            plan = result.plan
-            checkpoint = pending.checkpoint
-
+            target = pending.pending_approval_target
             if (
-                result.status
-                != ActionStatus.WAITING_FOR_PERMISSION
-                or result.pending_confirmation_steps
-                != (step_number,)
-                or plan is None
-                or plan.overall_risk
-                != RiskLevel.LOW
-                or checkpoint is None
-                or checkpoint.next_step_number
-                != step_number
+                pending.result.status != ActionStatus.WAITING_FOR_PERMISSION
+                or pending.result.pending_confirmation_steps != (step_number,)
+                or target is None
+                or target.subject.request_id != request_id
+                or target.subject.step_number != step_number
             ):
                 return None
+            return target
 
-            matching_steps = tuple(
-                step
-                for step in plan.steps
-                if (
-                    step.step_number
-                    == step_number
-                )
-            )
+    def preview_single_browser(self, request_id: UUID) -> str | None:
+        """Compatibility reader for stored C1 browser targets."""
+        target = self.preview_pending_approval(request_id, step_number=1)
+        if target is None or target.subject.capability != "browser":
+            return None
+        return target.prepared_target if type(target.prepared_target) is str else None
 
-            if len(matching_steps) != 1:
+    def preview_checkpoint_browser(
+        self, request_id: UUID, *, step_number: int,
+    ) -> str | None:
+        """Compatibility reader for stored C2 browser targets."""
+        with self._lock:
+            pending = self._pending.get(request_id)
+            if pending is None or pending.checkpoint is None:
                 return None
-
-            step = matching_steps[0]
-
-            if (
-                step.capability != "browser"
-                or step.risk != RiskLevel.LOW
-                or set(step.arguments) != {"url"}
-            ):
-                return None
-
-            source_argument = (
-                step.arguments["url"]
-            )
-
-            if (
-                source_argument.source
-                != ArgumentSource.STEP_OUTPUT
-            ):
-                return None
-
-            # The checkpoint must describe exactly the completed
-            # prefix of this same plan.
-            prefix_steps = tuple(
-                item
-                for item in plan.steps
-                if item.step_number < step_number
-            )
-
-            expected_numbers = tuple(
-                item.step_number
-                for item in prefix_steps
-            )
-
-            actual_numbers = tuple(
-                item.step_number
-                for item
-                in checkpoint.step_results
-            )
-
-            if actual_numbers != expected_numbers:
-                return None
-
-            if (
-                set(checkpoint.outputs)
-                != set(expected_numbers)
-            ):
-                return None
-
-            for (
-                plan_step,
-                result_item,
-            ) in zip(
-                prefix_steps,
-                checkpoint.step_results,
-                strict=True,
-            ):
-                if (
-                    result_item.status
-                    != ActionStatus.COMPLETED
-                    or result_item.capability
-                    != plan_step.capability
-                    or dict(
-                        checkpoint.outputs[
-                            plan_step.step_number
-                        ]
-                    )
-                    != dict(result_item.data)
-                ):
-                    return None
-
-            source_step = (
-                source_argument.step_number
-            )
-
-            output_key = (
-                source_argument.output_key
-            )
-
-            if (
-                type(source_step) is not int
-                or source_step >= step_number
-                or type(output_key) is not str
-                or not output_key
-                or source_step
-                not in checkpoint.outputs
-                or output_key
-                not in checkpoint.outputs[
-                    source_step
-                ]
-            ):
-                return None
-
-            if (
-                set(
-                    checkpoint
-                    .resolved_arguments
-                )
-                != {"url"}
-            ):
-                return None
-
-            source_url = (
-                checkpoint.outputs[
-                    source_step
-                ][
-                    output_key
-                ]
-            )
-
-            if (
-                checkpoint
-                .resolved_arguments["url"]
-                != source_url
-            ):
-                return None
-
-            url = source_url
-
-        return (
-            self
-            ._validate_browser_preview_url(
-                url
-            )
-        )
+        target = self.preview_pending_approval(request_id, step_number=step_number)
+        if target is None or target.subject.capability != "browser":
+            return None
+        return target.prepared_target if type(target.prepared_target) is str else None
 
     def run(self, request: ActionRequest) -> OrchestrationResult:
         """Plan a new request exactly once, without pre-authorizing any step."""
@@ -495,6 +248,7 @@ class Orchestrator:
             plan,
             confirmed_steps=confirmed,
             checkpoint=pending.checkpoint,
+            pending_approval_target=pending.pending_approval_target,
         )
 
     @staticmethod
@@ -621,19 +375,39 @@ class Orchestrator:
         *,
         confirmed_steps: frozenset[int],
         checkpoint: ExecutionCheckpoint | None = None,
+        pending_approval_target: PendingApprovalTarget | None = None,
     ) -> OrchestrationResult:
         try:
-            if checkpoint is None:
-                report = self._executor.execute(
-                    plan,
-                    confirmed_steps=confirmed_steps,
-                )
-            else:
-                report = self._executor.execute(
-                    plan,
-                    confirmed_steps=confirmed_steps,
-                    checkpoint=checkpoint,
-                )
+            execution_arguments = {"confirmed_steps": confirmed_steps}
+            if checkpoint is not None:
+                execution_arguments["checkpoint"] = checkpoint
+            if pending_approval_target is not None:
+                execution_arguments["pending_approval_target"] = pending_approval_target
+            report = self._executor.execute(plan, **execution_arguments)
+            target = report.pending_approval_target
+            if target is not None:
+                if not isinstance(target, PendingApprovalTarget):
+                    raise ValueError("Executor returned an invalid pending target.")
+                subject = target.subject
+                matching = tuple(step for step in plan.steps
+                                 if step.step_number == subject.step_number)
+                decisions = (() if report.permission_report is None
+                             else report.permission_report.decisions)
+                if (
+                    report.status != ActionStatus.WAITING_FOR_PERMISSION
+                    or subject.request_id != plan.request_id
+                    or report.pending_confirmation_steps != (subject.step_number,)
+                    or subject.step_number in confirmed_steps
+                    or len(matching) != 1
+                    or matching[0].capability != subject.capability
+                    or matching[0].risk != subject.risk
+                    or target.effective_permission is not PermissionMode.CONFIRM_BEFORE_EXECUTION
+                    or not any(decision.step_number == subject.step_number
+                               and decision.capability == subject.capability
+                               and decision.effective_permission == target.effective_permission
+                               for decision in decisions)
+                ):
+                    raise ValueError("Pending approval target does not match the waiting report.")
             if report.request_id != plan.request_id:
                 raise ValueError("Executor returned a report with a different request_id.")
             if (
@@ -702,5 +476,6 @@ class Orchestrator:
                         if report.checkpoint is not None
                         else None
                     ),
+                    report.pending_approval_target,
                 )
         return result

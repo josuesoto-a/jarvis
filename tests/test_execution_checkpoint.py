@@ -162,6 +162,7 @@ def test_resume_uses_frozen_url_without_replaying_search():
     result = engine.resume(
         request.request_id,
         confirmed_steps=frozenset({2}),
+        expected_subject=waiting.execution_report.pending_approval_target.subject,
     )
 
     assert result.completed
@@ -212,6 +213,7 @@ def test_external_checkpoint_mutation_does_not_change_private_target():
     result = engine.resume(
         request.request_id,
         confirmed_steps=frozenset({2}),
+        expected_subject=waiting.execution_report.pending_approval_target.subject,
     )
 
     assert result.completed

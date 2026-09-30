@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 from uuid import uuid4
 
+from capabilities.browser import prepare_browser_approval
 from core.approval import ApprovalSubject
-from core.contracts import RiskLevel
+from core.contracts import PermissionMode, RiskLevel
 from integrations.local_browser_approval import (
     approval_is_current,
     preview_browser_approval,
@@ -36,20 +37,17 @@ def projection(
     )
 
 
-def fake_orchestrator(
-    *,
-    literal=URL,
-    checkpoint=URL,
-):
+def fake_orchestrator(request_id, *, literal=URL, checkpoint=URL):
+    targets = {
+        step: prepare_browser_approval(
+            {"url": url}, request_id=request_id, step_number=step,
+            risk=RiskLevel.LOW,
+            effective_permission=PermissionMode.CONFIRM_BEFORE_EXECUTION,
+        )
+        for step, url in ((1, literal), (2, checkpoint)) if url is not None
+    }
     return SimpleNamespace(
-        preview_single_browser=(
-            lambda request_id:
-                literal
-        ),
-        preview_checkpoint_browser=(
-            lambda request_id, *, step_number:
-                checkpoint
-        ),
+        preview_pending_approval=lambda request_id, *, step_number: targets.get(step_number),
     )
 
 
@@ -82,7 +80,7 @@ def test_literal_preview_is_backed_by_generic_subject():
     )
 
     approval = preview_browser_approval(
-        fake_orchestrator(),
+        fake_orchestrator(request_id),
         pending,
     )
 
@@ -137,7 +135,7 @@ def test_checkpoint_preview_uses_same_generic_contract():
 
     approval = (
         preview_checkpoint_browser_approval(
-            fake_orchestrator(),
+            fake_orchestrator(request_id),
             pending,
         )
     )
@@ -168,7 +166,7 @@ def test_call_id_is_transport_identity_not_subject_identity():
     request_id = uuid4()
 
     first = preview_browser_approval(
-        fake_orchestrator(),
+        fake_orchestrator(request_id),
         projection(
             request_id,
             call_id="call-one",
@@ -176,7 +174,7 @@ def test_call_id_is_transport_identity_not_subject_identity():
     )
 
     second = preview_browser_approval(
-        fake_orchestrator(),
+        fake_orchestrator(request_id),
         projection(
             request_id,
             call_id="call-two",
@@ -212,7 +210,7 @@ def test_changed_current_url_invalidates_approval_subject():
 
     approval = preview_browser_approval(
         fake_orchestrator(
-            literal=URL
+            request_id, literal=URL
         ),
         pending,
     )
@@ -220,7 +218,7 @@ def test_changed_current_url_invalidates_approval_subject():
     assert approval is not None
 
     changed = fake_orchestrator(
-        literal=(
+        request_id, literal=(
             "https://example.com/changed"
         )
     )
@@ -244,7 +242,7 @@ def test_call_id_mismatch_still_fails_before_subject_match():
     )
 
     approval = preview_browser_approval(
-        fake_orchestrator(),
+        fake_orchestrator(request_id),
         original,
     )
 
@@ -256,7 +254,7 @@ def test_call_id_mismatch_still_fails_before_subject_match():
     )
 
     assert not approval_is_current(
-        fake_orchestrator(),
+        fake_orchestrator(request_id),
         session(
             request_id,
             wrong,

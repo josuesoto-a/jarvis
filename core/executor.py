@@ -20,6 +20,12 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+from capabilities.browser import (
+    BrowserCapabilityError,
+    prepare_browser_approval,
+    validate_browser_approval_target,
+)
+from core.approval import PendingApprovalTarget
 from core.contracts import (
     ActionStatus,
     ArgumentSource,
@@ -157,6 +163,8 @@ class ExecutionReport:
     ) = None
 
     checkpoint: ExecutionCheckpoint | None = None
+
+    pending_approval_target: PendingApprovalTarget | None = None
 
     pending_confirmation_steps: tuple[
         int,
@@ -525,6 +533,7 @@ class Executor:
         validation_report: PlanValidationReport,
         permission_report: PermissionReport,
         checkpoint: ExecutionCheckpoint | None,
+        pending_approval_target: PendingApprovalTarget | None,
     ) -> ExecutionReport:
         """
         Execute the narrow C2A flow.
@@ -659,6 +668,17 @@ class Executor:
                 and step.step_number not in confirmed_steps
             ):
                 try:
+                    target = None
+                    if (plan.overall_risk == RiskLevel.LOW
+                            and step.capability == "browser"
+                            and step.risk == RiskLevel.LOW):
+                        target = prepare_browser_approval(
+                            resolved_arguments,
+                            request_id=plan.request_id,
+                            step_number=step.step_number,
+                            risk=step.risk,
+                            effective_permission=decision.effective_permission,
+                        )
                     continuation = ExecutionCheckpoint(
                         next_step_number=step.step_number,
                         outputs=deepcopy(outputs),
@@ -668,6 +688,15 @@ class Executor:
                         resolved_arguments=deepcopy(
                             resolved_arguments
                         ),
+                    )
+                except BrowserCapabilityError as error:
+                    return ExecutionReport(
+                        request_id=plan.request_id,
+                        status=ActionStatus.FAILED,
+                        step_results=tuple(step_results),
+                        message=f"Browser preparation failed: {error}",
+                        validation_report=validation_report,
+                        permission_report=permission_report,
                     )
                 except Exception as error:
                     return ExecutionReport(
@@ -697,12 +726,16 @@ class Executor:
                     validation_report=validation_report,
                     permission_report=permission_report,
                     checkpoint=continuation,
+                    pending_approval_target=target,
                     pending_confirmation_steps=(
                         step.step_number,
                     ),
                 )
 
             checkpoint_arguments = None
+            if (pending_approval_target is not None
+                    and step.step_number == pending_approval_target.subject.step_number):
+                resolved_arguments = {"url": pending_approval_target.prepared_target}
 
             handler = self._runtime_registry.get(
                 step.capability
@@ -770,12 +803,57 @@ class Executor:
         )
 
 
+    def _validate_browser_continuation(
+        self,
+        plan: ExecutionPlan,
+        target: PendingApprovalTarget,
+        *,
+        confirmed_steps: frozenset[int],
+        checkpoint: ExecutionCheckpoint | None,
+    ) -> None:
+        """Reject contradictory continuation state before any handler runs."""
+        if not isinstance(target, PendingApprovalTarget):
+            raise BrowserCapabilityError("Invalid pending approval envelope.")
+        matching = tuple(step for step in plan.steps
+                         if step.step_number == target.subject.step_number)
+        if len(matching) != 1:
+            raise BrowserCapabilityError("Pending browser step does not match the plan.")
+        step = matching[0]
+        if (
+            plan.overall_risk != RiskLevel.LOW
+            or step.capability != "browser"
+            or step.risk != RiskLevel.LOW
+            or step.step_number not in confirmed_steps
+        ):
+            raise BrowserCapabilityError("Unsupported or unconfirmed browser continuation.")
+        validate_browser_approval_target(
+            target, request_id=plan.request_id,
+            step_number=step.step_number, risk=step.risk,
+        )
+        if checkpoint is not None:
+            # The checkpoint flow validates its complete prefix before dispatch.
+            if (
+                checkpoint.next_step_number != step.step_number
+                or dict(checkpoint.resolved_arguments) != {"url": target.prepared_target}
+                or set(step.arguments) != {"url"}
+                or step.arguments["url"].source != ArgumentSource.STEP_OUTPUT
+            ):
+                raise BrowserCapabilityError("Checkpoint does not represent the prepared browser url.")
+        elif (
+            len(plan.steps) != 1
+            or set(step.arguments) != {"url"}
+            or step.arguments["url"].source != ArgumentSource.LITERAL
+            or step.arguments["url"].value != target.prepared_target
+        ):
+            raise BrowserCapabilityError("Literal plan does not represent the prepared browser url.")
+
     def execute(
         self,
         plan: ExecutionPlan,
         *,
         confirmed_steps: frozenset[int] = frozenset(),
         checkpoint: ExecutionCheckpoint | None = None,
+        pending_approval_target: PendingApprovalTarget | None = None,
     ) -> ExecutionReport:
         """
         Execute one complete plan.
@@ -849,6 +927,21 @@ class Executor:
             )
 
 
+        if pending_approval_target is not None:
+            try:
+                self._validate_browser_continuation(
+                    plan, pending_approval_target,
+                    confirmed_steps=confirmed_steps, checkpoint=checkpoint,
+                )
+            except (BrowserCapabilityError, ExecutorError) as error:
+                return ExecutionReport(
+                    request_id=plan.request_id,
+                    status=ActionStatus.FAILED,
+                    message=f"Invalid browser continuation: {error}",
+                    validation_report=validation_report,
+                    permission_report=permission_report,
+                )
+
         missing_confirmations = tuple(
             decision.step_number
             for decision
@@ -900,9 +993,53 @@ class Executor:
                 validation_report=validation_report,
                 permission_report=permission_report,
                 checkpoint=checkpoint,
+                pending_approval_target=pending_approval_target,
             )
 
         if missing_confirmations:
+            if (
+                len(plan.steps) == 1
+                and plan.overall_risk == RiskLevel.LOW
+                and plan.steps[0].capability == "browser"
+                and plan.steps[0].risk == RiskLevel.LOW
+                and not any(argument.source == ArgumentSource.STEP_OUTPUT
+                            for argument in plan.steps[0].arguments.values())
+            ):
+                step = plan.steps[0]
+                if not self._runtime_registry.has(step.capability):
+                    return ExecutionReport(
+                        request_id=plan.request_id,
+                        status=ActionStatus.BLOCKED,
+                        message="Missing runtime implementations: ('browser',)",
+                        validation_report=validation_report,
+                        permission_report=permission_report,
+                    )
+                try:
+                    arguments = self._resolve_arguments(step=step, outputs={})
+                    decision = next(item for item in permission_report.decisions
+                                    if item.step_number == step.step_number)
+                    target = prepare_browser_approval(
+                        arguments, request_id=plan.request_id,
+                        step_number=step.step_number, risk=step.risk,
+                        effective_permission=decision.effective_permission,
+                    )
+                except (BrowserCapabilityError, ExecutorError) as error:
+                    return ExecutionReport(
+                        request_id=plan.request_id,
+                        status=ActionStatus.FAILED,
+                        message=f"Browser preparation failed: {error}",
+                        validation_report=validation_report,
+                        permission_report=permission_report,
+                    )
+                return ExecutionReport(
+                    request_id=plan.request_id,
+                    status=ActionStatus.WAITING_FOR_PERMISSION,
+                    message=f"Execution requires confirmation for step: {step.step_number}",
+                    validation_report=validation_report,
+                    permission_report=permission_report,
+                    pending_confirmation_steps=(step.step_number,),
+                    pending_approval_target=target,
+                )
 
             return ExecutionReport(
                 request_id=plan.request_id,
@@ -977,12 +1114,11 @@ class Executor:
 
             try:
 
-                resolved_arguments = (
-                    self._resolve_arguments(
-                        step=step,
-                        outputs=outputs,
-                    )
-                )
+                if (pending_approval_target is not None
+                        and step.step_number == pending_approval_target.subject.step_number):
+                    resolved_arguments = {"url": pending_approval_target.prepared_target}
+                else:
+                    resolved_arguments = self._resolve_arguments(step=step, outputs=outputs)
 
             except ExecutorError as error:
 

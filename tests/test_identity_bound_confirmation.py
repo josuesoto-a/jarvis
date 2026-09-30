@@ -55,7 +55,7 @@ class _StaticPlanner:
         return self.plan_value
 
 
-def _build_system(*, handler=None):
+def _build_system(*, handler=None, capability="browser"):
     calls = []
 
     if handler is None:
@@ -66,13 +66,13 @@ def _build_system(*, handler=None):
     registry = CapabilityRegistry()
     registry.register(
         CapabilitySpec(
-            "browser",
+            capability,
             "Open an exact browser URL",
         )
     )
 
     runtimes = CapabilityRuntimeRegistry()
-    runtimes.register("browser", handler)
+    runtimes.register(capability, handler)
 
     permissions = PermissionEngine()
     validator = PlanValidator(
@@ -93,7 +93,7 @@ def _build_system(*, handler=None):
             ExecutionStep(
                 1,
                 "Open documentation",
-                "browser",
+                capability,
                 arguments={
                     "url": ExecutionArgument.literal(
                         "https://docs.python.org/3/"
@@ -382,6 +382,16 @@ def test_old_subject_cannot_consume_replacement_target():
         setup,
         url="https://example.com/replacement",
     )
+    # A simulated replacement must be coherent: B3 also binds execution.
+    with setup.orchestrator._lock:
+        pending = setup.orchestrator._pending[setup.request.request_id]
+        plan = pending.result.plan
+        step = replace(plan.steps[0], arguments={
+            "url": ExecutionArgument.literal(replacement_subject.arguments["url"]),
+        })
+        setup.orchestrator._pending[setup.request.request_id] = replace(
+            pending, result=replace(pending.result, plan=replace(plan, steps=(step,))),
+        )
     replacement = _attach_target(
         setup,
         replacement_subject,
@@ -509,7 +519,7 @@ def test_plan_validator_reruns_after_matching_identity(
 
 
 def test_legacy_pending_accepts_no_subject_and_rejects_subject():
-    legacy = _build_system()
+    legacy = _build_system(capability="sample")
     waiting = legacy.orchestrator.run(
         legacy.request
     )
@@ -519,7 +529,7 @@ def test_legacy_pending_accepts_no_subject_and_rejects_subject():
         confirmed_steps=frozenset({1}),
     ).completed
 
-    rejected = _build_system()
+    rejected = _build_system(capability="sample")
     waiting = rejected.orchestrator.run(
         rejected.request
     )

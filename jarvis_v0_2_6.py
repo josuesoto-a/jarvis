@@ -1087,7 +1087,8 @@ def main() -> None:
                                     action_session.confirm_pending(
                                         confirmed_steps=frozenset(
                                             {approval.step_number}
-                                        )
+                                        ),
+                                        expected_subject=approval.subject,
                                     )
                                 )
 

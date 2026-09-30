@@ -4,8 +4,7 @@ Browser-specific human presentation is backed by the generic
 ApprovalSubject identity contract.
 
 This module NEVER grants permission from a model event.
-It only previews an existing pending action, binds the exact browser
-target to an ApprovalSubject, and verifies that a local keyboard
+It only previews stored browser identity and verifies that a local keyboard
 approval still refers to that same target.
 
 The Live call_id remains transport/session identity and deliberately
@@ -18,10 +17,9 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from core.approval import (
-    ApprovalContractError,
-    ApprovalSubject,
+    PendingApprovalTarget,
 )
-from core.contracts import RiskLevel
+from core.contracts import PermissionMode, RiskLevel
 from core.orchestrator import Orchestrator
 from integrations.local_approval import (
     LocalApproval,
@@ -74,172 +72,63 @@ def _is_browser_approval(
     )
 
 
-def _make_browser_approval(
-    *,
+def _stored_browser_approval(
+    orchestrator: Orchestrator,
     projection: PendingPermissionUpdate,
-    request_id: UUID,
-    step_number: int,
-    url: str,
 ) -> LocalBrowserApproval | None:
-    """Bind one validated browser preview to generic approval identity."""
-
-    try:
-        subject = ApprovalSubject(
-            request_id=request_id,
-            step_number=step_number,
-            capability="browser",
-            risk=RiskLevel.LOW,
-            arguments={
-                "url": url,
-            },
-        )
-
-        approval = LocalBrowserApproval(
-            call_id=projection.call_id,
-            subject=subject,
-        )
-
-        if not _is_browser_approval(
-            approval
-        ):
-            return None
-
-        return approval
-
-    except (
-        ApprovalContractError,
-        TypeError,
-        ValueError,
-    ):
+    """Retain stored capability identity; add only interaction metadata."""
+    if len(projection.pending_confirmation_steps) != 1:
         return None
+    step_number = projection.pending_confirmation_steps[0]
+    if type(step_number) is not int or step_number < 1 or step_number not in projection.confirmation_steps:
+        return None
+    try:
+        request_id = UUID(projection.request_id)
+        target = orchestrator.preview_pending_approval(request_id, step_number=step_number)
+        if (not _is_stored_browser_target(target)
+                or target.subject.request_id != request_id
+                or target.subject.step_number != step_number):
+            return None
+        return LocalBrowserApproval(call_id=projection.call_id, subject=target.subject)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _is_stored_browser_target(target: object) -> bool:
+    return (
+        isinstance(target, PendingApprovalTarget)
+        and target.subject.capability == "browser"
+        and target.subject.risk == RiskLevel.LOW
+        and target.effective_permission == PermissionMode.CONFIRM_BEFORE_EXECUTION
+        and type(target.prepared_target) is str
+        and target.subject.arguments == {"url": target.prepared_target}
+    )
 
 
 def preview_browser_approval(
     orchestrator: Orchestrator,
     projection: PendingPermissionUpdate,
 ) -> LocalBrowserApproval | None:
-    """Original C1 literal browser approval, now using ApprovalSubject."""
-
-    if (
-        projection
-        .pending_confirmation_steps
-        != (1,)
-        or 1
-        not in projection.confirmation_steps
-    ):
+    """Compatibility entry point for stored C1 identity."""
+    if projection.pending_confirmation_steps != (1,):
         return None
-
-    try:
-        request_id = UUID(
-            projection.request_id
-        )
-
-    except (
-        TypeError,
-        ValueError,
-        AttributeError,
-    ):
-        return None
-
-    url = (
-        orchestrator
-        .preview_single_browser(
-            request_id
-        )
-    )
-
-    if url is None:
-        return None
-
-    return _make_browser_approval(
-        projection=projection,
-        request_id=request_id,
-        step_number=1,
-        url=url,
-    )
+    return _stored_browser_approval(orchestrator, projection)
 
 
 def preview_checkpoint_browser_approval(
     orchestrator: Orchestrator,
     projection: PendingPermissionUpdate,
 ) -> LocalBrowserApproval | None:
-    """C2 browser approval for an exact URL frozen in checkpoint."""
-
-    if (
-        len(
-            projection
-            .pending_confirmation_steps
-        )
-        != 1
-    ):
-        return None
-
-    step_number = (
-        projection
-        .pending_confirmation_steps[0]
-    )
-
-    if (
-        type(step_number) is not int
-        or step_number < 1
-        or step_number
-        not in projection.confirmation_steps
-    ):
-        return None
-
-    try:
-        request_id = UUID(
-            projection.request_id
-        )
-
-    except (
-        TypeError,
-        ValueError,
-        AttributeError,
-    ):
-        return None
-
-    url = (
-        orchestrator
-        .preview_checkpoint_browser(
-            request_id,
-            step_number=step_number,
-        )
-    )
-
-    if url is None:
-        return None
-
-    return _make_browser_approval(
-        projection=projection,
-        request_id=request_id,
-        step_number=step_number,
-        url=url,
-    )
+    """Compatibility entry point for stored browser identity."""
+    return _stored_browser_approval(orchestrator, projection)
 
 
 def preview_browser_approval_v2(
     orchestrator: Orchestrator,
     projection: PendingPermissionUpdate,
 ) -> LocalBrowserApproval | None:
-    """Support C1 literal plus C2 checkpoint browser approvals."""
-
-    literal = (
-        preview_browser_approval(
-            orchestrator,
-            projection,
-        )
-    )
-
-    if literal is not None:
-        return literal
-
-    return (
-        preview_checkpoint_browser_approval(
-            orchestrator,
-            projection,
-        )
-    )
+    """Read the stored identity for supported C1/C2 browser confirmation."""
+    return _stored_browser_approval(orchestrator, projection)
 
 
 def format_browser_approval(
@@ -301,88 +190,10 @@ def approval_is_current(
     action_session,
     approval: LocalBrowserApproval,
 ) -> bool:
-    """Rebuild and compare the exact current approval subject.
-
-    call_id protects Live/session identity.
-    ApprovalSubject protects execution-target identity.
-    Orchestrator remains the source of current pending state.
-    """
-
-    if not _is_browser_approval(
-        approval
-    ):
+    """Check session freshness and stored identity; atomic claim follows later."""
+    if not _is_browser_approval(approval) or not approval_session_matches(action_session, approval):
         return False
-
-    if not approval_session_matches(
-        action_session,
-        approval,
-    ):
-        return False
-
-    try:
-        request_id = UUID(
-            approval.request_id
-        )
-
-    except (
-        TypeError,
-        ValueError,
-        AttributeError,
-    ):
-        return False
-
-    current_url = None
-
-    # Preserve C1 behavior.
-    if approval.step_number == 1:
-        current_url = (
-            orchestrator
-            .preview_single_browser(
-                request_id
-            )
-        )
-
-    # Preserve C2 behavior.
-    if current_url is None:
-        current_url = (
-            orchestrator
-            .preview_checkpoint_browser(
-                request_id,
-                step_number=(
-                    approval.step_number
-                ),
-            )
-        )
-
-    if current_url is None:
-        return False
-
-    try:
-        current_subject = (
-            ApprovalSubject(
-                request_id=request_id,
-                step_number=(
-                    approval.step_number
-                ),
-                capability="browser",
-                risk=RiskLevel.LOW,
-                arguments={
-                    "url":
-                        current_url,
-                },
-            )
-        )
-
-    except (
-        ApprovalContractError,
-        TypeError,
-        ValueError,
-    ):
-        return False
-
-    return (
-        approval.subject
-        .same_target_as(
-            current_subject
-        )
+    target = orchestrator.preview_pending_approval(
+        approval.subject.request_id, step_number=approval.step_number,
     )
+    return _is_stored_browser_target(target) and target.subject.same_target_as(approval.subject)

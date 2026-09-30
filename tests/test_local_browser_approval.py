@@ -31,7 +31,7 @@ from integrations.local_browser_approval import (
 from integrations.openai_live import PendingPermissionUpdate
 
 
-def build_waiting_browser(url="https://docs.python.org/3/"):
+def build_waiting_browser(url="https://docs.python.org/3/", *, expected_status=ActionStatus.WAITING_FOR_PERMISSION):
     request = ActionRequest(
         goal="Abrir la URL",
         raw_input="Abre esta página",
@@ -94,7 +94,7 @@ def build_waiting_browser(url="https://docs.python.org/3/"):
 
     waiting = orchestrator.run(request)
 
-    assert waiting.status == ActionStatus.WAITING_FOR_PERMISSION
+    assert waiting.status == expected_status
     assert calls == []
 
     return orchestrator, request, calls, planner_calls
@@ -163,6 +163,7 @@ def test_confirmation_resumes_same_plan_without_replanning():
     result = engine.resume(
         request.request_id,
         confirmed_steps=frozenset({1}),
+        expected_subject=preview.subject,
     )
 
     assert result.status == ActionStatus.COMPLETED
@@ -211,7 +212,7 @@ def test_stale_call_cannot_be_approved():
     ],
 )
 def test_preview_rejects_unsafe_or_ambiguous_url(url):
-    engine, request, calls, _ = build_waiting_browser(url)
+    engine, request, calls, _ = build_waiting_browser(url, expected_status=ActionStatus.FAILED)
 
     assert preview_browser_approval(
         engine,
@@ -238,7 +239,7 @@ def test_preview_rejects_actual_ansi_escape():
     )
 
     engine, request, calls, _ = (
-        build_waiting_browser(url)
+        build_waiting_browser(url, expected_status=ActionStatus.FAILED)
     )
 
     assert preview_browser_approval(
@@ -251,6 +252,7 @@ def test_preview_rejects_actual_ansi_escape():
 
 def build_waiting_dependent_browser(
     url="https://docs.python.org/3/",
+    *, expected_status=ActionStatus.WAITING_FOR_PERMISSION,
 ):
     request = ActionRequest(
         goal="Busca y abre la documentación",
@@ -370,12 +372,12 @@ def build_waiting_dependent_browser(
 
     assert (
         waiting.status
-        == ActionStatus.WAITING_FOR_PERMISSION
+        == expected_status
     )
 
     assert (
         waiting.pending_confirmation_steps
-        == (2,)
+        == ((2,) if expected_status == ActionStatus.WAITING_FOR_PERMISSION else ())
     )
 
     assert search_calls == [
@@ -547,6 +549,7 @@ def test_checkpoint_approval_revalidates_and_resumes_without_replay():
         confirmed_steps=frozenset(
             {2}
         ),
+        expected_subject=preview.subject,
     )
 
     assert (
@@ -585,7 +588,7 @@ def test_checkpoint_preview_rejects_unsafe_resolved_url(
         browser_calls,
         _,
     ) = build_waiting_dependent_browser(
-        url
+        url, expected_status=ActionStatus.FAILED,
     )
 
     projection = make_projection(

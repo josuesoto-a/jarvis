@@ -266,7 +266,7 @@ def test_executor_rejects_checkpoint_output_result_mismatch():
     assert setup.browser_calls == []
 
 
-def test_private_checkpoint_corruption_cannot_be_previewed():
+def test_private_checkpoint_corruption_cannot_be_dispatched():
     setup = build_system()
 
     waiting = setup.orchestrator.run(
@@ -297,7 +297,12 @@ def test_private_checkpoint_corruption_cannot_be_previewed():
         )
     )
 
-    assert preview is None
+    assert preview == waiting.execution_report.pending_approval_target.prepared_target
+    result = setup.orchestrator.resume(
+        setup.request.request_id, confirmed_steps=frozenset({2}),
+        expected_subject=waiting.execution_report.pending_approval_target.subject,
+    )
+    assert result.status == ActionStatus.FAILED
     assert setup.browser_calls == []
 
 
@@ -347,6 +352,7 @@ def test_checkpoint_resume_rechecks_policy_before_browser(
     result = setup.orchestrator.resume(
         setup.request.request_id,
         confirmed_steps=frozenset({2}),
+        expected_subject=waiting.execution_report.pending_approval_target.subject,
     )
 
     assert (
@@ -394,6 +400,7 @@ def test_stale_checkpoint_approval_fails_after_request_consumed():
     completed = setup.orchestrator.resume(
         setup.request.request_id,
         confirmed_steps=frozenset({2}),
+        expected_subject=waiting.execution_report.pending_approval_target.subject,
     )
 
     assert completed.completed
@@ -478,6 +485,7 @@ def test_concurrent_checkpoint_resumes_execute_browser_once():
         return setup.orchestrator.resume(
             setup.request.request_id,
             confirmed_steps=frozenset({2}),
+            expected_subject=waiting.execution_report.pending_approval_target.subject,
         )
 
     with ThreadPoolExecutor(
@@ -528,13 +536,14 @@ def test_concurrent_checkpoint_resumes_execute_browser_once():
 def test_second_resume_after_completion_is_rejected():
     setup = build_system()
 
-    setup.orchestrator.run(
+    waiting = setup.orchestrator.run(
         setup.request
     )
 
     first = setup.orchestrator.resume(
         setup.request.request_id,
         confirmed_steps=frozenset({2}),
+        expected_subject=waiting.execution_report.pending_approval_target.subject,
     )
 
     assert first.completed
@@ -542,6 +551,7 @@ def test_second_resume_after_completion_is_rejected():
     second = setup.orchestrator.resume(
         setup.request.request_id,
         confirmed_steps=frozenset({2}),
+        expected_subject=waiting.execution_report.pending_approval_target.subject,
     )
 
     assert (

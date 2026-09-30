@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Mapping
 
+from core.approval import ApprovalSubject
 from core.action_worker import ActionWorker
 
 from integrations.openai_live import (
@@ -551,6 +552,7 @@ class VoiceActionBridge:
         self,
         *,
         confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None = None,
     ) -> str:
         """Resume the active action through the trusted local path.
 
@@ -572,9 +574,17 @@ class VoiceActionBridge:
 
             call_id = state.call_id
 
+        confirmation_arguments = {
+            "confirmed_steps": confirmed_steps,
+        }
+        if expected_subject is not None:
+            confirmation_arguments[
+                "expected_subject"
+            ] = expected_subject
+
         return self._coordinator.confirm(
             call_id,
-            confirmed_steps=confirmed_steps,
+            **confirmation_arguments,
         )
 
     # ========================================================

@@ -583,7 +583,8 @@ def test_worker_has_only_transport_and_contract_domain_imports():
     tree = ast.parse(inspect.getsource(worker_module))
     imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert {name for name in imports if name.startswith("core.")} == {
-        "core.contracts", "core.transport", "core.orchestrator",
+        "core.approval", "core.contracts", "core.transport",
+        "core.orchestrator",
     }
     # Verify TYPE_CHECKING causes no runtime import of orchestration dependencies.
     script = """

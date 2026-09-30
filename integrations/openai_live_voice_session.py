@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Mapping
 
+from core.approval import ApprovalSubject
 from integrations.openai_live_voice import (
     VoiceActionBridge,
     VoiceActionProtocolError,
@@ -157,9 +158,18 @@ class RearmingVoiceActionSession:
         self,
         *,
         confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None = None,
     ) -> str:
+        confirmation_arguments = {
+            "confirmed_steps": confirmed_steps,
+        }
+        if expected_subject is not None:
+            confirmation_arguments[
+                "expected_subject"
+            ] = expected_subject
+
         return self._bridge.confirm_pending(
-            confirmed_steps=confirmed_steps,
+            **confirmation_arguments,
         )
 
     def handle_event(

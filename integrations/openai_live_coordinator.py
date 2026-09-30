@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from core.approval import ApprovalSubject
 from core.action_worker import ActionWorker
 from integrations.openai_live import (
     ActionProjection,
@@ -143,6 +144,7 @@ class LiveActionCoordinator:
         call_id: str,
         *,
         confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None = None,
     ) -> str:
         """Queue a trusted local confirmation for the bound Jarvis request."""
 
@@ -150,9 +152,17 @@ class LiveActionCoordinator:
             call_id
         )
 
+        confirmation_arguments = {
+            "confirmed_steps": confirmed_steps,
+        }
+        if expected_subject is not None:
+            confirmation_arguments[
+                "expected_subject"
+            ] = expected_subject
+
         request_id = self._worker.confirm(
             binding.request_id,
-            confirmed_steps=confirmed_steps,
+            **confirmation_arguments,
         )
 
         if request_id != binding.request_id:

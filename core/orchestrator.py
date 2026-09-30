@@ -24,6 +24,10 @@ from dataclasses import dataclass
 from threading import Lock
 from uuid import UUID
 
+from core.approval import (
+    ApprovalSubject,
+    PendingApprovalTarget,
+)
 from core.contracts import (
     ActionRequest,
     ActionStatus,
@@ -93,6 +97,7 @@ class _PendingExecution:
     result: OrchestrationResult
     confirmed_steps: frozenset[int]
     checkpoint: ExecutionCheckpoint | None = None
+    pending_approval_target: PendingApprovalTarget | None = None
 
 
 class Orchestrator:
@@ -452,6 +457,7 @@ class Orchestrator:
         request_id: UUID,
         *,
         confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None = None,
     ) -> OrchestrationResult:
         """Consume a pending plan atomically and execute it without planning.
 
@@ -460,7 +466,11 @@ class Orchestrator:
         the executor. A WAITING result retains the same plan and prior grants;
         every other result (including an exception) permanently ends resumption.
         """
-        self._validate_confirmation_types(request_id, confirmed_steps)
+        self._validate_confirmation_types(
+            request_id,
+            confirmed_steps,
+            expected_subject,
+        )
         with self._lock:
             pending = self._pending.get(request_id)
             if pending is None:
@@ -469,7 +479,12 @@ class Orchestrator:
                     status=ActionStatus.FAILED,
                     error="No plan is waiting for permission for this request_id.",
                 )
-            self._validate_pending_confirmation(pending, confirmed_steps)
+            self._validate_pending_confirmation(
+                request_id,
+                pending,
+                confirmed_steps,
+                expected_subject,
+            )
             confirmed = pending.confirmed_steps | confirmed_steps
             # Consume atomically; never run the executor under the lock.
             del self._pending[request_id]
@@ -484,7 +499,9 @@ class Orchestrator:
 
     @staticmethod
     def _validate_confirmation_types(
-        request_id: UUID, confirmed_steps: frozenset[int],
+        request_id: UUID,
+        confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None,
     ) -> None:
         if not isinstance(request_id, UUID):
             raise TypeError("request_id must be a UUID")
@@ -492,32 +509,111 @@ class Orchestrator:
             raise TypeError("confirmed_steps must be a frozenset of positive integers")
         if any(type(step) is not int or step < 1 for step in confirmed_steps):
             raise ValueError("confirmed_steps must contain only positive integers")
+        if (
+            expected_subject is not None
+            and not isinstance(
+                expected_subject,
+                ApprovalSubject,
+            )
+        ):
+            raise TypeError(
+                "expected_subject must be an ApprovalSubject or None"
+            )
 
     @staticmethod
     def _validate_pending_confirmation(
-        pending: _PendingExecution, confirmed_steps: frozenset[int],
+        request_id: UUID,
+        pending: _PendingExecution,
+        confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None,
     ) -> None:
+        pending_target = (
+            pending.pending_approval_target
+        )
+
+        if pending_target is None:
+            if expected_subject is not None:
+                raise ValueError(
+                    "expected_subject cannot be supplied for a legacy pending plan"
+                )
+
+        else:
+            if expected_subject is None:
+                raise ValueError(
+                    "expected_subject is required for an identity-bound pending plan"
+                )
+
+            current_subject = (
+                pending_target.subject
+            )
+
+            if current_subject.request_id != request_id:
+                raise ValueError(
+                    "pending approval subject request_id does not match the pending request"
+                )
+
+            if expected_subject.request_id != request_id:
+                raise ValueError(
+                    "expected_subject request_id does not match the claimed request"
+                )
+
+            if confirmed_steps != frozenset(
+                {
+                    expected_subject.step_number,
+                }
+            ):
+                raise ValueError(
+                    "identity-bound confirmation must claim exactly the expected subject step"
+                )
+
+            if current_subject.step_number != expected_subject.step_number:
+                raise ValueError(
+                    "expected_subject step does not match the current pending target"
+                )
+
         if not confirmed_steps:
             raise ValueError("confirmed_steps must not be empty")
         if confirmed_steps & pending.confirmed_steps:
             raise ValueError("confirmed_steps contains an already confirmed step")
         if not confirmed_steps <= set(pending.result.pending_confirmation_steps):
             raise ValueError("confirmed_steps contains steps not requested for confirmation")
+        if (
+            pending_target is not None
+            and not pending_target.subject.same_target_as(
+                expected_subject
+            )
+        ):
+            raise ValueError(
+                "expected_subject does not match the current pending target"
+            )
 
     def validate_confirmation(
-        self, request_id: UUID, *, confirmed_steps: frozenset[int],
+        self,
+        request_id: UUID,
+        *,
+        confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None = None,
     ) -> None:
         """Read-only admission check; neither grant nor reserve authorization.
 
         resume revalidates atomically when the queued operation is processed.
         The worker never needs a copy of the pending plan or accumulated grants.
         """
-        self._validate_confirmation_types(request_id, confirmed_steps)
+        self._validate_confirmation_types(
+            request_id,
+            confirmed_steps,
+            expected_subject,
+        )
         with self._lock:
             pending = self._pending.get(request_id)
             if pending is None:
                 raise ValueError("No plan is waiting for permission for this request_id.")
-            self._validate_pending_confirmation(pending, confirmed_steps)
+            self._validate_pending_confirmation(
+                request_id,
+                pending,
+                confirmed_steps,
+                expected_subject,
+            )
 
     def _execute(
         self,

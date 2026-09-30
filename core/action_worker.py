@@ -39,6 +39,7 @@ from queue import Queue
 from threading import Condition, Thread, current_thread
 from typing import TYPE_CHECKING
 
+from core.approval import ApprovalSubject
 from core.contracts import ActionRequest
 from core.transport import TransportRequest, TransportResponse
 from core.transport import to_action_request, to_transport_response
@@ -63,6 +64,7 @@ class _Operation:
     work: _Work
     # None is initial run; a nonempty set is a queued resume command, not grants.
     confirmed_steps: frozenset[int] | None = None
+    expected_subject: ApprovalSubject | None = None
 
 
 def _validate_timeout(timeout: float | None) -> None:
@@ -136,7 +138,13 @@ class ActionWorker:
             self._condition.notify_all()
         return request_id
 
-    def confirm(self, request_id: str, *, confirmed_steps: frozenset[int]) -> str:
+    def confirm(
+        self,
+        request_id: str,
+        *,
+        confirmed_steps: frozenset[int],
+        expected_subject: ApprovalSubject | None = None,
+    ) -> str:
         """Admit resume immediately or raise; never execute on the caller thread.
 
         Use the canonical ID returned by submit and an explicit nonempty
@@ -157,10 +165,24 @@ class ActionWorker:
             if not callable(self._resume) or not callable(self._validate_confirmation):
                 raise RuntimeError("confirm requires a bound Orchestrator.run")
             # Read-only domain validation: no plans or grant history are copied.
+            validation_arguments = {
+                "confirmed_steps": confirmed_steps,
+            }
+            if expected_subject is not None:
+                validation_arguments[
+                    "expected_subject"
+                ] = expected_subject
             self._validate_confirmation(
-                work.request.request_id, confirmed_steps=confirmed_steps,
+                work.request.request_id,
+                **validation_arguments,
             )
-            self._queue.put_nowait(_Operation(work, confirmed_steps))
+            self._queue.put_nowait(
+                _Operation(
+                    work,
+                    confirmed_steps,
+                    expected_subject,
+                )
+            )
             work.state = "queued_resume"
             self._condition.notify_all()
         return request_id
@@ -226,8 +248,18 @@ class ActionWorker:
             phase = "resume" if resuming else "execution"
             try:
                 if resuming:
+                    resume_arguments = {
+                        "confirmed_steps": (
+                            operation.confirmed_steps
+                        ),
+                    }
+                    if operation.expected_subject is not None:
+                        resume_arguments[
+                            "expected_subject"
+                        ] = operation.expected_subject
                     outcome = self._resume(
-                        work.request.request_id, confirmed_steps=operation.confirmed_steps,
+                        work.request.request_id,
+                        **resume_arguments,
                     )
                 else:
                     outcome = self._run(work.request)

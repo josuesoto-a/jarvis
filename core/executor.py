@@ -25,6 +25,14 @@ from capabilities.browser import (
     prepare_browser_approval,
     validate_browser_approval_target,
 )
+from capabilities.terminal import (
+    TerminalContractError,
+    build_terminal_approval_target,
+    prepare_terminal_execution,
+    terminal_request_from_plan,
+    validate_terminal_approval_target,
+    validate_terminal_target_for_request,
+)
 from core.approval import PendingApprovalTarget
 from core.contracts import (
     ActionStatus,
@@ -32,6 +40,7 @@ from core.contracts import (
     ExecutionArgument,
     ExecutionPlan,
     ExecutionStep,
+    PermissionMode,
     RiskLevel,
 )
 from core.permissions import (
@@ -87,6 +96,9 @@ class InvalidExecutionCheckpointError(
 class StepExecutionResult:
     """
     Outcome of one executed step.
+
+    Handlers may return this existing result to preserve structured FAILED
+    data. Executor validates step/capability and accepts only COMPLETED/FAILED.
     """
 
     step_number: int
@@ -390,6 +402,108 @@ class Executor:
 
         return normalized
 
+
+    def _run_handler(self, step: ExecutionStep, arguments: Mapping[str, Any]) -> StepExecutionResult:
+        """Ordinary mappings succeed; explicit step results can fail with data."""
+        raw = self._runtime_registry.get(step.capability)(arguments)
+        if isinstance(raw, StepExecutionResult):
+            if (type(raw.step_number) is not int
+                    or raw.step_number != step.step_number
+                    or raw.capability != step.capability
+                    or raw.status not in {ActionStatus.COMPLETED, ActionStatus.FAILED}
+                    or type(raw.status) is not ActionStatus
+                    or (raw.error is not None and type(raw.error) is not str)):
+                raise InvalidCapabilityResultError("Runtime returned an inconsistent step result.")
+            return StepExecutionResult(
+                step.step_number, step.capability, raw.status,
+                self._validate_handler_result(step=step, result=raw.data), raw.error,
+            )
+        return StepExecutionResult(
+            step.step_number, step.capability, ActionStatus.COMPLETED,
+            self._validate_handler_result(step=step, result=raw),
+        )
+
+    def _prepared_runtime_arguments(
+        self, step: ExecutionStep, target: PendingApprovalTarget,
+    ) -> dict[str, Any]:
+        """Explicit dispatch shapes for the two supported prepared capabilities."""
+        if step.capability == "browser" and target.subject.capability == "browser":
+            return {"url": target.prepared_target}
+        if step.capability == "terminal" and target.subject.capability == "terminal":
+            return {"target": target.prepared_target}
+        raise ExecutorError("Unsupported prepared-target dispatch capability.")
+
+    def _execute_terminal_approval(
+        self, plan: ExecutionPlan, *, confirmed_steps: frozenset[int],
+        checkpoint: ExecutionCheckpoint | None,
+        pending_approval_target: PendingApprovalTarget | None,
+        validation_report: PlanValidationReport, permission_report: PermissionReport,
+    ) -> ExecutionReport:
+        """Single literal terminal approval/continuation, with no launcher."""
+        def report(status, message, **kwargs):
+            return ExecutionReport(
+                request_id=plan.request_id, status=status, message=message,
+                validation_report=validation_report, permission_report=permission_report,
+                **kwargs,
+            )
+
+        try:
+            request = terminal_request_from_plan(plan)
+            step = plan.steps[0]
+            if checkpoint is not None:
+                raise TerminalContractError("terminal v1 does not support checkpoints")
+            decisions = permission_report.decisions
+            if (len(decisions) != 1
+                    or decisions[0].step_number != step.step_number
+                    or decisions[0].capability != "terminal"
+                    or decisions[0].effective_permission is not PermissionMode.CONFIRM_BEFORE_EXECUTION):
+                raise TerminalContractError("terminal v1 requires confirmation permission")
+            if confirmed_steps and confirmed_steps != frozenset({step.step_number}):
+                raise TerminalContractError("terminal confirmation must identify exactly its step")
+            if pending_approval_target is not None:
+                if confirmed_steps != frozenset({step.step_number}):
+                    raise TerminalContractError("terminal continuation has not been confirmed")
+                validate_terminal_approval_target(
+                    pending_approval_target, request_id=plan.request_id,
+                    step_number=step.step_number, risk=step.risk,
+                )
+                validate_terminal_target_for_request(pending_approval_target.prepared_target, request)
+            elif confirmed_steps:
+                raise TerminalContractError("terminal continuation requires the stored target")
+        except (TerminalContractError, TypeError, ValueError) as error:
+            return report(ActionStatus.FAILED, f"Invalid terminal approval state: {error}")
+
+        if not self._runtime_registry.has("terminal"):
+            return report(ActionStatus.BLOCKED, "Missing runtime implementations: ('terminal',)")
+
+        if pending_approval_target is None:
+            try:
+                prepared = prepare_terminal_execution(request)
+                pending_approval_target = build_terminal_approval_target(
+                    prepared, request_id=plan.request_id, step_number=step.step_number,
+                    risk=step.risk, effective_permission=decisions[0].effective_permission,
+                )
+                validate_terminal_target_for_request(prepared, request)
+            except (TerminalContractError, TypeError, ValueError, OSError) as error:
+                return report(ActionStatus.FAILED, f"Terminal preparation failed: {error}")
+            return report(
+                ActionStatus.WAITING_FOR_PERMISSION,
+                f"Execution requires confirmation for step: {step.step_number}",
+                pending_confirmation_steps=(step.step_number,),
+                pending_approval_target=pending_approval_target,
+            )
+
+        try:
+            result = self._run_handler(
+                step, self._prepared_runtime_arguments(step, pending_approval_target),
+            )
+        except Exception as error:
+            result = StepExecutionResult(
+                step.step_number, step.capability, ActionStatus.FAILED,
+                error=f"{type(error).__name__}: {error}",
+            )
+        return report(result.status, f"Terminal recording step {result.status.value}.",
+                      step_results=(result,))
 
     # --------------------------------------------------------
     # EXECUTION
@@ -735,23 +849,10 @@ class Executor:
             checkpoint_arguments = None
             if (pending_approval_target is not None
                     and step.step_number == pending_approval_target.subject.step_number):
-                resolved_arguments = {"url": pending_approval_target.prepared_target}
-
-            handler = self._runtime_registry.get(
-                step.capability
-            )
+                resolved_arguments = self._prepared_runtime_arguments(step, pending_approval_target)
 
             try:
-                raw_result = handler(
-                    resolved_arguments
-                )
-
-                result = (
-                    self._validate_handler_result(
-                        step=step,
-                        result=raw_result,
-                    )
-                )
+                result = self._run_handler(step, resolved_arguments)
 
             except Exception as error:
                 step_results.append(
@@ -778,18 +879,15 @@ class Executor:
                     permission_report=permission_report,
                 )
 
-            outputs[
-                step.step_number
-            ] = result
-
-            step_results.append(
-                StepExecutionResult(
-                    step_number=step.step_number,
-                    capability=step.capability,
-                    status=ActionStatus.COMPLETED,
-                    data=result,
+            step_results.append(result)
+            if result.status == ActionStatus.FAILED:
+                return ExecutionReport(
+                    request_id=plan.request_id, status=ActionStatus.FAILED,
+                    step_results=tuple(step_results),
+                    message=f"Execution failed at step {step.step_number}.",
+                    validation_report=validation_report, permission_report=permission_report,
                 )
-            )
+            outputs[step.step_number] = result.data
 
         return ExecutionReport(
             request_id=plan.request_id,
@@ -926,6 +1024,15 @@ class Executor:
                 ),
             )
 
+
+        if (any(step.capability == "terminal" for step in plan.steps)
+                or (isinstance(pending_approval_target, PendingApprovalTarget)
+                    and pending_approval_target.subject.capability == "terminal")):
+            return self._execute_terminal_approval(
+                plan, confirmed_steps=confirmed_steps, checkpoint=checkpoint,
+                pending_approval_target=pending_approval_target,
+                validation_report=validation_report, permission_report=permission_report,
+            )
 
         if pending_approval_target is not None:
             try:
@@ -1116,7 +1223,7 @@ class Executor:
 
                 if (pending_approval_target is not None
                         and step.step_number == pending_approval_target.subject.step_number):
-                    resolved_arguments = {"url": pending_approval_target.prepared_target}
+                    resolved_arguments = self._prepared_runtime_arguments(step, pending_approval_target)
                 else:
                     resolved_arguments = self._resolve_arguments(step=step, outputs=outputs)
 
@@ -1162,12 +1269,6 @@ class Executor:
             # GET HANDLER
             # ------------------------------------------------
 
-            handler = (
-                self._runtime_registry.get(
-                    step.capability
-                )
-            )
-
 
             # ------------------------------------------------
             # EXECUTE HANDLER
@@ -1175,16 +1276,7 @@ class Executor:
 
             try:
 
-                raw_result = handler(
-                    resolved_arguments
-                )
-
-                result = (
-                    self._validate_handler_result(
-                        step=step,
-                        result=raw_result,
-                    )
-                )
+                result = self._run_handler(step, resolved_arguments)
 
             except Exception as error:
 
@@ -1229,25 +1321,15 @@ class Executor:
             # STORE OUTPUT
             # ------------------------------------------------
 
-            outputs[
-                step.step_number
-            ] = result
-
-
-            step_results.append(
-                StepExecutionResult(
-                    step_number=(
-                        step.step_number
-                    ),
-                    capability=(
-                        step.capability
-                    ),
-                    status=(
-                        ActionStatus.COMPLETED
-                    ),
-                    data=result,
+            step_results.append(result)
+            if result.status == ActionStatus.FAILED:
+                return ExecutionReport(
+                    request_id=plan.request_id, status=ActionStatus.FAILED,
+                    step_results=tuple(step_results),
+                    message=f"Execution failed at step {step.step_number}.",
+                    validation_report=validation_report, permission_report=permission_report,
                 )
-            )
+            outputs[step.step_number] = result.data
 
 
         # ====================================================

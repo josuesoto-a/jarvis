@@ -7,8 +7,8 @@ import pytest
 
 from capabilities.terminal import (
     TerminalExecutionRequest,
-    TerminalExecutionTarget,
     prepare_terminal_execution,
+    terminal_approval_arguments as _terminal_projection,
 )
 from core.approval import (
     ApprovalContractError,
@@ -39,38 +39,6 @@ def _browser_subject(
             }
         ),
     )
-
-
-def _terminal_projection(
-    target: TerminalExecutionTarget,
-) -> dict[str, object]:
-    # Every execution-relevant v1 target property must be represented.
-    return {
-        'contract_version':
-            target.contract_version,
-        'platform_contract':
-            target.platform_contract,
-        'executable_requested':
-            target.executable_requested,
-        'executable_resolved':
-            target.executable_resolved,
-        'executable_identity':
-            target.executable_identity,
-        'argv': list(target.argv),
-        'cwd': target.cwd,
-        'environment_policy_id':
-            target.environment_policy_id,
-        'environment': [
-            list(item)
-            for item in target.environment
-        ],
-        'environment_identity':
-            target.environment_identity,
-        'timeout_seconds':
-            target.timeout_seconds,
-        'stdin_mode': target.stdin_mode,
-        'shell': target.shell,
-    }
 
 
 def test_browser_pending_target_preserves_exact_contract_fields():

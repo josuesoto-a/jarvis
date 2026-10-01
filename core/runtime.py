@@ -10,7 +10,10 @@ This module does not decide permissions and does not execute plans.
 """
 
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.executor import StepExecutionResult
 
 from core.registry import (
     canonicalize_capability_name,
@@ -23,7 +26,7 @@ from core.registry import (
 
 CapabilityHandler = Callable[
     [Mapping[str, Any]],
-    Mapping[str, Any],
+    "Mapping[str, Any] | StepExecutionResult",
 ]
 
 

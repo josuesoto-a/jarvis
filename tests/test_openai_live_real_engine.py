@@ -81,11 +81,11 @@ class DeterministicPlanner:
             risk = RiskLevel.LOW
 
         elif self.mode == "waiting":
-            capability = "terminal"
+            capability = "confirmation_test"
             risk = RiskLevel.LOW
 
         elif self.mode == "blocked":
-            capability = "terminal"
+            capability = "confirmation_test"
             risk = RiskLevel.CRITICAL
 
         elif self.mode == "failed":
@@ -176,9 +176,10 @@ def build_stack(
 
     registry.register(
         CapabilitySpec(
-            name="terminal",
+            # This fixture exercises Live plumbing, not a terminal launch contract.
+            name="confirmation_test",
             description=(
-                "Offline deterministic terminal."
+                "Offline generic confirmation fixture."
             ),
         )
     )
@@ -215,7 +216,7 @@ def build_stack(
             "source": "offline",
         }
 
-    def terminal_handler(
+    def confirmation_handler(
         arguments,
     ):
         snapshot = dict(
@@ -224,7 +225,7 @@ def build_stack(
 
         runtime_calls.append(
             (
-                "terminal",
+                "confirmation_test",
                 snapshot,
             )
         )
@@ -242,8 +243,8 @@ def build_stack(
     )
 
     runtimes.register(
-        "terminal",
-        terminal_handler,
+        "confirmation_test",
+        confirmation_handler,
     )
 
     validator = (
@@ -463,7 +464,7 @@ def test_real_engine_waits_for_permission_before_runtime():
         admission = (
             stack.coordinator.ingest(
                 make_event(
-                    goal="Run terminal operation"
+                    goal="Run confirmed operation"
                 )
             )
         )
@@ -526,7 +527,7 @@ def test_real_engine_confirmation_resumes_exact_plan_without_replanning():
         admission = (
             stack.coordinator.ingest(
                 make_event(
-                    goal="Run terminal operation"
+                    goal="Run confirmed operation"
                 )
             )
         )
@@ -623,10 +624,10 @@ def test_real_engine_confirmation_resumes_exact_plan_without_replanning():
             stack.runtime_calls
             == [
                 (
-                    "terminal",
+                    "confirmation_test",
                     {
                         "value": (
-                            "Run terminal operation"
+                            "Run confirmed operation"
                         )
                     },
                 )
@@ -654,7 +655,7 @@ def test_real_permission_engine_blocks_critical_plan():
     try:
         stack.coordinator.ingest(
             make_event(
-                goal="Critical terminal operation"
+                goal="Critical confirmed operation"
             )
         )
 
@@ -936,7 +937,7 @@ def test_two_live_calls_cross_same_real_worker_in_fifo_order():
         )
 
 
-def test_model_context_cannot_grant_real_terminal_permission():
+def test_model_context_cannot_grant_real_confirmation_permission():
     stack = build_stack(
         "waiting"
     )
@@ -949,10 +950,10 @@ def test_model_context_cannot_grant_real_terminal_permission():
                 arguments=json.dumps(
                     {
                         "goal": (
-                            "Run terminal operation"
+                            "Run confirmed operation"
                         ),
                         "raw_input": (
-                            "Run terminal operation"
+                            "Run confirmed operation"
                         ),
                         "context": {
                             "note": (

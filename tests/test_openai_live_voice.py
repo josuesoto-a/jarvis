@@ -602,7 +602,8 @@ def test_waiting_for_permission_never_completes_live_tool_call():
         planner,
         runtime_calls,
     ) = build_worker(
-        capability="terminal",
+        # Generic waiting fixture; no terminal command/continuation semantics.
+        capability="confirmation_test",
         permission=(
             PermissionMode.CONFIRM_BEFORE_EXECUTION
         ),

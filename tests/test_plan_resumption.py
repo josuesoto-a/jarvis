@@ -23,6 +23,7 @@ from core.runtime import CapabilityRuntimeRegistry
 
 @pytest.fixture
 def setup():
+    # Generic multi-step confirmations; terminal v1 disallows this shape.
     request = ActionRequest("Original goal", "Original input")
     borrowed_arguments = {"value": ExecutionArgument.literal("original")}
     borrowed_steps = [
@@ -32,7 +33,7 @@ def setup():
             arguments={"value": ExecutionArgument.step_output(1, "value")},
         ),
         ExecutionStep(
-            3, "Run original operation", "terminal",
+            3, "Run original operation", "confirmation_test",
             arguments={"value": ExecutionArgument.literal("original operation")},
         ),
     ]
@@ -47,14 +48,14 @@ def setup():
             # A replan would authorize different arguments under the same steps.
             return ExecutionPlan(incoming.request_id, (
                 ExecutionStep(
-                    1, "Replacement", "terminal",
+                    1, "Replacement", "confirmation_test",
                     arguments={"value": ExecutionArgument.literal("replacement")},
                 ),
             ), RiskLevel.HIGH)
 
     registry = CapabilityRegistry()
     runtimes = CapabilityRuntimeRegistry()
-    for capability in ("web_search", "filesystem", "terminal"):
+    for capability in ("web_search", "filesystem", "confirmation_test"):
         registry.register(CapabilitySpec(capability, "Offline test"))
 
         def handler(arguments, name=capability):
@@ -104,7 +105,7 @@ def test_resume_executes_exact_presented_plan_without_replanning(setup):
     assert setup.handler_calls == [
         ("web_search", {"value": "original"}),
         ("filesystem", {"value": "original"}),
-        ("terminal", {"value": "original operation"}),
+        ("confirmation_test", {"value": "original operation"}),
     ]
 
 
@@ -202,7 +203,7 @@ def test_confirmation_for_one_request_does_not_authorize_another(setup):
         setup.engine.resume(other_request.request_id, confirmed_steps=frozenset())
     assert len(setup.handler_calls) == 3
     assert setup.engine.resume(other_request.request_id, confirmed_steps=frozenset({1})).completed
-    assert setup.handler_calls[-1] == ("terminal", {"value": "replacement"})
+    assert setup.handler_calls[-1] == ("confirmation_test", {"value": "replacement"})
     assert len(setup.planner_calls) == 2
 
 

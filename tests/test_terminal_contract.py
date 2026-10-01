@@ -200,10 +200,10 @@ def test_planner_preserves_step_output_regardless_of_argument_name():
 def test_executor_resolves_structured_argv_without_conversion():
     observed = []
     capabilities = CapabilityRegistry()
-    capabilities.register(CapabilitySpec("terminal", "Test terminal"))
+    capabilities.register(CapabilitySpec("example", "Test structured capability"))
     runtimes = CapabilityRuntimeRegistry()
     runtimes.register(
-        "terminal",
+        "example",
         lambda arguments: observed.append(arguments["argv"]) or {"ok": True},
     )
     executor = Executor(
@@ -218,7 +218,7 @@ def test_executor_resolves_structured_argv_without_conversion():
             ExecutionStep(
                 1,
                 "Test argv",
-                "terminal",
+                "example",
                 arguments={
                     "argv": ExecutionArgument.literal_string_sequence(
                         ["one", "two", "three"]

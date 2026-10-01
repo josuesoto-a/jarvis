@@ -96,8 +96,9 @@ def build_registry() -> CapabilityRegistry:
 
     registry.register(
         CapabilitySpec(
-            name="terminal",
-            description="Run terminal commands.",
+            # Generic confirmation fixture; command strings are not terminal v1.
+            name="confirmation_test",
+            description="Inert generic confirmation handler.",
         )
     )
 
@@ -356,7 +357,7 @@ def test_confirmation_blocks_before_any_execution():
     calls = []
 
 
-    def terminal_handler(arguments):
+    def confirmation_handler(arguments):
 
         calls.append(
             dict(arguments)
@@ -370,8 +371,8 @@ def test_confirmation_blocks_before_any_execution():
     runtime = CapabilityRuntimeRegistry()
 
     runtime.register(
-        "terminal",
-        terminal_handler,
+        "confirmation_test",
+        confirmation_handler,
     )
 
 
@@ -383,7 +384,7 @@ def test_confirmation_blocks_before_any_execution():
     plan = make_plan(
         make_step(
             1,
-            "terminal",
+            "confirmation_test",
             arguments={
                 "command":
                     ExecutionArgument.literal(
@@ -415,7 +416,7 @@ def test_confirmed_step_can_execute():
     calls = []
 
 
-    def terminal_handler(arguments):
+    def confirmation_handler(arguments):
 
         calls.append(
             dict(arguments)
@@ -429,8 +430,8 @@ def test_confirmed_step_can_execute():
     runtime = CapabilityRuntimeRegistry()
 
     runtime.register(
-        "terminal",
-        terminal_handler,
+        "confirmation_test",
+        confirmation_handler,
     )
 
 
@@ -442,7 +443,7 @@ def test_confirmed_step_can_execute():
     plan = make_plan(
         make_step(
             1,
-            "terminal",
+            "confirmation_test",
             arguments={
                 "command":
                     ExecutionArgument.literal(

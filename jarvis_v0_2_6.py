@@ -484,10 +484,9 @@ def action_poller(
                     else:
                         console_message(
                             "[PERMISO NO AUTORIZABLE EN v0.2.6] "
-                            "Solo se admite browser de riesgo bajo "
-                            "con URL literal o una URL concreta "
-                            "congelada en checkpoint. "
-                            "El navegador seguirá detenido."
+                            "No hay una presentacion local compatible "
+                            "con el target pendiente. "
+                            "La accion seguira detenida."
                         )
 
                     last_notice = notice
@@ -1077,8 +1076,8 @@ def main() -> None:
                             ):
                                 console_message(
                                     "[PERMISO RECHAZADO] La solicitud "
-                                    "o su URL ya no coinciden. "
-                                    "No se ejecutó el navegador."
+                                    "o su target ya no coinciden. "
+                                    "No se autorizo la accion."
                                 )
                                 break
 

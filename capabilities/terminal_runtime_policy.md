@@ -1,8 +1,10 @@
-# Terminal runtime boundary (D1G-A)
+# Terminal runtime boundary (D1G-A / D1G-C)
 
 D1G-A implements preparation, approval identity and continuation to injected
-recording handlers only. No terminal runtime or terminal local approval adapter
-is registered in production. The following policy is REQUIRED for D1G-D; none
+recording handlers only. D1G-C registers terminal local approval presentation,
+but no terminal capability or runtime is registered in production. Production
+terminal pending state remains unreachable. The following policy is REQUIRED
+for D1G-D; none
 of the launch/capture/containment mechanisms below is implemented in D1G-A.
 
 ## Prepared authority

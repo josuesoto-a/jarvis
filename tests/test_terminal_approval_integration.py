@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -131,8 +131,8 @@ def test_local_test_adapter_routes_exact_stored_subject_and_claim(system):
         confirmation_steps=(1,), pending_confirmation_steps=(1,), message="Test confirmation",
     )
     default = build_default_local_approval_registry()
-    assert default.names() == ("browser",)
-    assert default.resolve(system.engine, projection) is None
+    assert default.names() == ("browser", "terminal")
+    assert default.resolve(system.engine, projection).subject is stored.subject
     seen = []
     registry = LocalApprovalAdapterRegistry()
 
@@ -565,6 +565,153 @@ def test_changed_production_modules_have_no_launch_api_or_activation():
                 assert name not in banned
                 assert not any(k.arg == "shell" and isinstance(k.value, ast.Constant)
                                and k.value.value is True for k in node.keywords)
-    assert build_default_local_approval_registry().names() == ("browser",)
+    assert build_default_local_approval_registry().names() == ("browser", "terminal")
     bootstrap = (root / "core" / "bootstrap.py").read_text(encoding="utf-8-sig")
     assert "terminal" not in bootstrap
+
+
+def _production_keyboard_loop():
+    tree = ast.parse((Path(__file__).parents[1] / "jarvis_v0_2_6.py").read_text(encoding="utf-8"))
+    loop = next(node for node in ast.walk(tree) if isinstance(node, ast.While)
+                and any(isinstance(item, ast.Assign) and isinstance(item.value, ast.Call)
+                        and isinstance(item.value.func, ast.Name) and item.value.func.id == "input"
+                        for item in node.body))
+    return compile(ast.Module(body=[loop], type_ignores=[]), "production_autorizar", "exec")
+
+
+@pytest.mark.parametrize("change", ["exact", "stale", "wrong_subject", "policy", "plan"])
+def test_terminal_presentation_real_keyboard_voice_worker_and_recording_continuation(system, monkeypatch, change):
+    from integrations.openai_live_voice import VoiceActionBridge
+    from integrations.openai_live_voice_session import RearmingVoiceActionSession
+    from integrations.local_terminal_approval import display_terminal_string
+    from test_openai_live_voice import FakeLiveConnection, perform_action_event, poll_until
+
+    # Live owns request identity; the inert planner still returns the same shape.
+    monkeypatch.setattr(system.engine._planner, "plan",
+                        lambda request: replace(system.plan, request_id=request.request_id))
+    worker = ActionWorker(system.engine.run, capacity=2)
+    worker.start()
+    try:
+        connection = FakeLiveConnection()
+        bridge = VoiceActionBridge(connection=connection, worker=worker)
+        session = RearmingVoiceActionSession(
+            connection=connection, bridge=bridge,
+            action_instructions="Inert terminal test", action_tool_choice="auto",
+        )
+        admission = session.handle_event(perform_action_event())
+        _, projection = poll_until(bridge, lambda snapshot, result: isinstance(result, PendingPermissionUpdate))
+        assert isinstance(projection, PendingPermissionUpdate)
+        request_id = UUID(admission.request_id)
+        stored = system.engine.preview_pending_approval(request_id, step_number=1)
+        registry = build_default_local_approval_registry()
+        approval = registry.resolve(system.engine, projection)
+        text = registry.render(approval)
+        assert display_terminal_string(stored.prepared_target.executable_resolved) in text
+        assert 'argv[1] = ""' in text
+        assert approval.subject is stored.subject
+        assert approval.prepared_target is stored.prepared_target is system.prepared[0]
+        assert registry.is_current(system.engine, session, approval)
+        assert system.calls == []
+        for module in (terminal, executor_module):
+            monkeypatch.setattr(module, "prepare_terminal_execution",
+                                lambda *a, **k: pytest.fail("local approval re-prepared"))
+        for name in ("_digest_file", "_resolve_windows_executable", "_freeze_windows_environment"):
+            monkeypatch.setattr(terminal, name, lambda *a, **k: pytest.fail("local approval rediscovered identity"))
+
+        changed_target = replace(stored.prepared_target, argv=("changed",))
+        changed_pending = terminal.build_terminal_approval_target(
+            changed_target, request_id=request_id, step_number=1, risk=stored.subject.risk,
+            effective_permission=PermissionMode.CONFIRM_BEFORE_EXECUTION,
+        )
+        if change == "stale":
+            with system.engine._lock:
+                state = system.engine._pending[request_id]
+                system.engine._pending[request_id] = replace(state, pending_approval_target=changed_pending)
+        elif change == "wrong_subject":
+            with pytest.raises(ValueError):
+                worker.confirm(admission.request_id, confirmed_steps=frozenset({1}),
+                               expected_subject=changed_pending.subject)
+            approval = replace(approval, subject=changed_pending.subject, prepared_target=changed_target)
+        elif change == "policy":
+            evaluate = system.permissions.evaluate
+
+            def tightened_permissions(plan):
+                report = evaluate(plan)
+                return replace(report, decisions=tuple(
+                    replace(d, effective_permission=PermissionMode.FORBIDDEN) for d in report.decisions
+                ))
+
+            monkeypatch.setattr(system.permissions, "evaluate", tightened_permissions)
+        elif change == "plan":
+            validate = system.validator.validate
+            monkeypatch.setattr(system.validator, "validate",
+                                lambda plan: replace(validate(plan), status=PlanValidationStatus.BLOCKED))
+
+        forwarded, messages = [], []
+        confirm = session.confirm_pending
+
+        def record_confirm(**kwargs):
+            forwarded.append(kwargs)
+            return confirm(**kwargs)
+
+        monkeypatch.setattr(session, "confirm_pending", record_confirm)
+        answers = iter(["autorizar", "AUTORIZAR extra", "\u202eAUTORIZAR", "AUTORIZAR"])
+        namespace = dict(
+            approval=approval, app=SimpleNamespace(orchestrator=system.engine), action_session=session,
+            LOCAL_APPROVAL_REGISTRY=registry, stop_event=SimpleNamespace(is_set=lambda: False),
+            input=lambda prompt: next(answers), console_message=messages.append,
+        )
+        exec(_production_keyboard_loop(), namespace)
+        assert len(messages) == 4  # Three invalid tokens plus final acceptance/rejection.
+        if change in {"stale", "wrong_subject"}:
+            assert forwarded == system.calls == []
+            with pytest.raises(ValueError):
+                worker.confirm(admission.request_id, confirmed_steps=frozenset({1}),
+                               expected_subject=approval.subject)
+        else:
+            assert forwarded == [{"confirmed_steps": frozenset({1}), "expected_subject": stored.subject}]
+            assert forwarded[0]["expected_subject"] is stored.subject
+            expected_status = "completed" if change == "exact" else "blocked"
+            assert worker.result(admission.request_id, timeout=3)["status"] == expected_status
+            assert len(system.validations) == 2
+            if change != "plan":
+                assert len(system.evaluations) == 2
+            if change == "exact":
+                assert len(system.calls) == 1
+                assert system.calls[0] is stored.prepared_target is system.prepared[0]
+                assert session.snapshot().action.call_id == approval.call_id
+                # A second local AUTORIZAR fails freshness and cannot dispatch.
+                namespace["input"] = lambda prompt: "AUTORIZAR"
+                exec(_production_keyboard_loop(), namespace)
+                assert len(forwarded) == len(system.calls) == 1
+                with pytest.raises((KeyError, ValueError)):
+                    worker.confirm(admission.request_id, confirmed_steps=frozenset({1}),
+                                   expected_subject=stored.subject)
+            else:
+                assert system.calls == []
+        assert len(system.prepared) == 1
+    finally:
+        worker.shutdown(wait=True, timeout=3)
+
+
+def test_d1gc_presentation_production_files_have_no_process_api():
+    root = Path(__file__).parents[1]
+    banned = {"subprocess", "Popen", "system", "popen", "create_subprocess_exec",
+              "create_subprocess_shell", "CreateProcess"}
+    for filename in ("integrations/local_terminal_approval.py", "integrations/local_approval_defaults.py",
+                     "jarvis_v0_2_6.py"):
+        source = (root / filename).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                assert all(alias.name.split(".")[0] not in banned for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                assert (node.module or "").split(".")[0] not in banned
+            elif isinstance(node, ast.Call):
+                name = (node.func.id if isinstance(node.func, ast.Name)
+                        else node.func.attr if isinstance(node.func, ast.Attribute) else "")
+                assert name not in banned
+                assert not any(k.arg == "shell" and isinstance(k.value, ast.Constant)
+                               and k.value.value is True for k in node.keywords)
+    app_source = (root / "core/bootstrap.py").read_text(encoding="utf-8-sig")
+    assert "terminal" not in app_source

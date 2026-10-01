@@ -15,6 +15,11 @@ from integrations.local_browser_approval import (
     format_browser_approval,
     preview_browser_target,
 )
+from integrations.local_terminal_approval import (
+    format_terminal_approval,
+    preview_terminal_target,
+    terminal_approval_is_current,
+)
 
 
 def build_default_local_approval_registry(
@@ -29,6 +34,16 @@ def build_default_local_approval_registry(
             preview=preview_browser_target,
             render=format_browser_approval,
             is_current=approval_is_current,
+        )
+    )
+
+    # Presentation availability does not register an execution runtime.
+    registry.register(
+        LocalApprovalAdapter(
+            capability="terminal",
+            preview=preview_terminal_target,
+            render=format_terminal_approval,
+            is_current=terminal_approval_is_current,
         )
     )
 

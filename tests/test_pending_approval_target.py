@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from terminal_fixtures import console_pe_bytes
 
 from capabilities.terminal import (
     TerminalExecutionRequest,
@@ -220,7 +221,7 @@ def test_terminal_semantic_change_changes_approval_identity(
     tmp_path: Path,
 ):
     executable = tmp_path / 'fixture.exe'
-    executable.write_bytes(b'contract fixture; never executed')
+    executable.write_bytes(console_pe_bytes())  # Inspection-only; never launched.
     first_target = prepare_terminal_execution(
         TerminalExecutionRequest(
             executable=str(executable),

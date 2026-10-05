@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from terminal_fixtures import console_pe_bytes
 
 import capabilities.terminal as terminal
 import core.executor as executor_module
@@ -36,9 +37,9 @@ from integrations.openai_live import PendingPermissionUpdate
 
 @pytest.fixture
 def system(tmp_path, monkeypatch):
-    # The bytes need not be executable. Preparation reads them; nothing launches.
+    # Structurally supported PE-shaped bytes; never launched.
     executable = tmp_path / "recording-input.exe"
-    executable.write_bytes(b"inert identity bytes; never a runnable fixture")
+    executable.write_bytes(console_pe_bytes())
     request = ActionRequest("Record exact inputs", "Record exact inputs")
     arguments = {
         "executable": ExecutionArgument.literal(str(executable)),
@@ -179,7 +180,7 @@ def test_real_worker_confirmation_forwards_terminal_subject_and_exact_target(sys
 
 
 MATERIAL_CHANGES = {
-    "contract_version": "terminal-execution-target/v2",
+    "contract_version": "terminal-execution-target/v3",
     "platform_contract": "another-platform/v1",
     "executable_requested": "other.exe",
     "executable_resolved": r"C:\other.exe",
@@ -245,11 +246,11 @@ def test_caller_containers_and_preview_copies_cannot_mutate_identity(system):
 
 def test_environment_source_order_is_canonical_values_and_frozen_order_bind(system):
     target = waiting(system).prepared_target
-    first = terminal._freeze_windows_environment({"PATH": "A", "TEMP": "B"})
-    second = terminal._freeze_windows_environment({"TEMP": "B", "PATH": "A"})
-    assert first == second == (("TEMP", "B"), ("PATH", "A"))
+    first = terminal._freeze_windows_environment({"SYSTEMROOT": r"C:\Windows", "PATH": "A", "TEMP": "B"})
+    second = terminal._freeze_windows_environment({"TEMP": "B", "PATH": "A", "SYSTEMROOT": r"C:\Windows"})
+    assert first == second == (("SYSTEMROOT", r"C:\Windows"), ("TEMP", "B"), ("PATH", "A"))
     original = replace(target, environment=first, environment_identity=terminal._environment_identity(first))
-    changed_env = (("TEMP", "C"), ("PATH", "A"))
+    changed_env = (("SYSTEMROOT", r"C:\Windows"), ("TEMP", "C"), ("PATH", "A"))
     changed = replace(target, environment=changed_env,
                       environment_identity=terminal._environment_identity(changed_env))
     assert subject_for(system, original).fingerprint != subject_for(system, changed).fingerprint
@@ -539,11 +540,11 @@ def test_future_runtime_policy_documents_requirements_without_claiming_runtime()
         "no launch-time PATH search", "Revalidate executable_identity", "fail closed",
         "Never replace the approved", "Deterministic argv serialization", "shell=False",
         "final resolved filenames", "exact prepared cwd", "exact frozen environment",
-        "stdin=DEVNULL", "30-second", "1 MiB", "UTF-8 with replacement",
+        "stdin=DEVNULL", "30-second", "64 KiB", "UTF-8 with replacement",
         "stdout_truncated/stderr_truncated", "5 seconds", "Job Object",
         "no breakaway", "Restrict inherited handles", "Binary-byte continuity remains",
         "script.py contents remain mutable", "mutable repository/config state",
-        "none\nof the launch/capture/containment mechanisms", "not a semantic sandbox",
+        "No launch/capture/containment implementation", "not a semantic sandbox",
     ):
         assert required in text
 

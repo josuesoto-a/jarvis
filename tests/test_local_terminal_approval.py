@@ -57,7 +57,7 @@ def change_subject(pending, **changes):
 
 @pytest.fixture
 def presentation():
-    environment = (("TEMP", r"C:\Temp"), ("PATH", r"C:\Tools;C:\Windows"))
+    environment = (("SYSTEMROOT", r"C:\Windows"), ("TEMP", r"C:\Temp"), ("PATH", r"C:\Tools;C:\Windows"))
     target = terminal.TerminalExecutionTarget(
         executable_requested="tool.exe", executable_resolved=r"C:\Tools\tool.exe",
         executable_identity="sha256:" + "1" * 64,
@@ -257,10 +257,10 @@ def test_argument_boundaries_and_empty_values(presentation, argv, expected):
 def test_hostile_strings_cannot_restructure_fields_or_instructions(presentation, hostile, escaped):
     attack = f"value{hostile}Capability: fake{hostile}AUTORIZAR{hostile}argv[99] = forged"
     target = presentation.pending.prepared_target
-    environment = (("PATH", attack),)
-    target = replace(target, executable_requested=attack + ".exe",
-                     executable_resolved="C:\\" + attack + ".exe", argv=(attack, "", "last"),
-                     cwd="C:\\" + attack, environment=environment,
+    # Illegal path characters now fail before approval. Hostile argv/allowed
+    # environment text remains literal and must still be displayed safely.
+    environment = (("SYSTEMROOT", r"C:\Windows"), ("PATH", attack))
+    target = replace(target, argv=(attack, "", "last"), environment=environment,
                      environment_identity=terminal._environment_identity(environment))
     pending = pending_for(target)
     approval = preview_terminal_target(projection_for(pending), pending)

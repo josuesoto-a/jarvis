@@ -1,11 +1,163 @@
-# Terminal runtime contract (D1G-D1a, non-executing)
+# Terminal runtime contract (D1G-D1a / D1G-D1b0, non-executing)
 
 D1G-A established preparation/approval/recording continuation. D1G-C registered
 terminal local approval presentation only. D1G-D1a hardens pure contracts.
+D1G-D1b0 adds pure lifecycle/ownership accounting in terminal_runtime.py.
 No launch/capture/containment implementation exists here. No terminal process
 handler, default runtime, planner activation or bootstrap execution wiring.
 D1G-D1b implements an unregistered backend; D1G-D2 is the first real process gate,
 D3 adversarial tests, D4 lifecycle/readiness and D1G-E explicit activation.
+
+## D1G-D1b0 lifecycle and ownership source of truth
+
+This foundation records supplied evidence using opaque Python tokens. It does
+not acquire, release, launch, resume, wait for, or terminate OS resources. There
+is no backend, executing runtime, handler adapter, registration, or activation.
+Target/preparation/approval versions and identity-bound policies are unchanged.
+
+LaunchAdmissionDomain is explicit and injectable. Every future production
+runtime must share one durable process-local domain supplied by its factory;
+constructing a new runtime with that domain cannot bypass poisoning. D1b0 does
+not create a production singleton or claim to prevent a caller from deliberately
+constructing a separate isolated domain. Tests use fresh domains, never shared
+global state. Admission is not authorization; atomic approval claim stays with
+the Orchestrator.
+
+| Domain state | Admission / cancellation / shutdown |
+| --- | --- |
+| OPEN | One invocation may be admitted |
+| RUNNING | Another admission fails; cancellation may be requested |
+| POISONED | No admission; retained quarantine remains available for remediation |
+| CLOSED | Admission permanently closed; cancellation/shutdown idempotent |
+
+Shutdown during RUNNING closes admission and requests cancellation but does not
+claim CLOSED while ownership remains active. POISONED has precedence over
+shutdown and never changes to CLOSED, even after successful remediation.
+cancel_active() only requests cancellation of the active invocation; shutdown()
+also permanently closes admission. Both are nonblocking requests. Neither runs
+cleanup, joins a worker, invokes a backend, or claims a five-second completion.
+Snapshots report incomplete closure until a nonpoisoned domain is actually idle
+after shutdown. Application shutdown wiring remains D4.
+
+The domain strongly retains its active invocation. Quarantine preallocates a
+separate QuarantineOwner, latches poison, then transfers responsibility by one
+domain quarantine-reference assignment before clearing the active lease. That
+single assignment both retains the successor and defines ledger authority and
+QUARANTINED phase, including after an interruption in subsequent bookkeeping.
+The old ledger remains inspectable but cannot acquire, borrow, release, confirm
+release or mark uncertainty after transfer. Only the quarantine owner may record
+release/remediation. Duplicate transfer is rejected. Existing borrow leases and
+pending-operation completion records may discharge their retained obligations;
+they do not release ownership. Receipts remain late-fact channels for the new
+owner. Caller deletion cannot drop these resources while the shared domain lives.
+This is in-process durability, not restart recovery or an interpreter-teardown/
+native-memory guarantee. Poison has no reopen/reset operation in v1: restart
+is the documented recovery boundary, never implicit construction of a runtime.
+
+| Invocation phase | Next ordinary phases |
+| --- | --- |
+| PREFLIGHT | CREATE_COMMIT, CLEANING |
+| CREATE_COMMIT | CREATED_SUSPENDED, CLEANING |
+| CREATED_SUSPENDED | RUNNING, CLEANING |
+| RUNNING | CLEANING |
+| CLEANING | FINISHED, QUARANTINED |
+| FINISHED | None |
+| QUARANTINED | None; late evidence and remediation may be recorded |
+
+There is no general phase setter. Named operations enforce evidence gates. The
+budget starts at admission before preflight. Creation commit and begin_call()
+both check cancellation/deadline; commit_resume() provides the analogous final
+model gate before one future resume attempt. Cancellation after a gate can race
+an already-committed native call: successful evidence must still be recorded.
+One cleanup deadline is established on entering CLEANING and never reset.
+First cleanup reason is retained; later timeout does not overwrite a timely
+root-exit decision. A root exit first observed at/after the execution deadline
+is conservatively classified as timeout; exact OS exit chronology is not known.
+
+| Creation classification | Exact recorded evidence |
+| --- | --- |
+| P0 / PRE_CREATE | Zero creation-call attempts |
+| C1 / CREATE_CALL_FAILED | One attempt, explicitly reported failure, no created process |
+| P1 / PROCESS_CREATED | One attempt, explicitly reported success; ownership mandatory |
+| Unresolved (classification null) | One attempt with no reported result; neither P0 nor C1 |
+
+The preallocated CreationReceipt has reserved root-process and primary-thread
+owners. record_success() permanently records native success BEFORE resource
+wrapper validation/attachment. attach_process()/attach_thread() attach each
+distinct opaque payload to its already-registered owner exactly once. The
+optional pair convenience form also records success before pair validation;
+failure there stays P1 with incomplete adoption. The future native bridge must
+use immediate success recording before any fallible marshaling. Interruptions
+after success, either attachment or phase adoption preserve P1 and every known
+resource. Missing attachment is explicit and blocks FINISHED, including when
+root exit and empty containment have been reported. Success cannot be overwritten,
+failed, retried or reset. An unresolved call is neither C1 nor safe completion;
+late evidence in quarantine does not reopen admission or change terminal phase.
+The future native backend must still prove exception-safe capture of native
+success before this Python recording boundary. D1b0 does not prove that ABI.
+
+ResourceLedger reserves ownership slots before acquisition. adopt() attaches
+one opaque payload immediately; raw scalar handle values are not the ownership
+representation. Domain-scoped ResourceIdentity includes a monotonically issued
+generation and resource kind/role. Backend value reuse with fresh opaque tokens
+does not reuse resource identity. Slots/payloads cannot be replaced or readopted
+within the ledger after release. Foreign ledger owners are rejected. A future
+backend must issue fresh opaque tokens per acquisition, never alias live native
+ownership across domains. Snapshots expose no payloads.
+Acquisitions are limited to preflight; creation uses its already-reserved slots.
+
+Ownership states are RESERVED, OWNED, RELEASING, RELEASE_UNCERTAIN, RELEASED and
+QUARANTINED. BorrowedResource is a lease rather than another ownership state.
+Release is prohibited while borrowed or referenced by a pending operation.
+begin_release() records the one attempt and returns its opaque payload for an
+external backend release outside the lock; confirm_released() records supplied
+success. mark_release_uncertain() retains identity and prevents blind retry.
+Independent later proof may confirm release without performing a second call.
+mark_still_owned() records definite release failure as OWNED, rather than
+RELEASE_UNCERTAIN. The original one-attempt receipt remains latched; there is
+no automatic or blind retry, and unresolved ownership requires quarantine.
+No destructor or release callback runs automatically.
+
+PendingOperation retains every dependency until confirm_completed(). A
+cancellation request is not completion and does not permit release. Quarantine
+preserves pending operations, in-progress releases, uncertainty and creation
+receipts. Remediation can confirm completion/release, but cannot create new
+operations, acquire resources or turn QUARANTINED into FINISHED.
+
+FINISHED requires a resolved, fully adopted creation receipt, all acquired resources released,
+no borrows/pending operations, and (for P1) observed root exit plus confirmed
+empty containment. Root exit alone is insufficient. Unconfirmed cleanup
+requires quarantine and poison; successful remediation reports resolution but
+never clears poison. A backend must report accurate evidence: this pure model
+does not independently verify supplied facts or perform containment.
+
+CleanupEvidence derives cleanup_completed from terminal phase, receipt adoption,
+resource states, borrow/I/O obligations and required lifecycle confirmations.
+It cannot be supplied as an independent success Boolean. Any quarantine transfer
+permanently keeps that invocation's cleanup_completed=False, even if explicit
+remediation later resolves the quarantine. Release uncertainty is never successful
+release; a second blind release attempt is prohibited. A definitely still-owned
+resource stays OWNED until a release attempt has genuinely ambiguous evidence.
+
+TerminalRuntimeOutcome is frozen and lifecycle-only: receipt, resume/exit facts,
+derived cleanup evidence, first terminal trigger and bounded cleanup issues.
+It has no Executor/ActionStatus dependency or fabricated output/exit code.
+Its local COMPLETED disposition means a resumed root-exit lifecycle with complete
+cleanup and no recorded failure, not proof of program exit zero or acceptable
+capture. D1b must add actual execution/capture semantics before result projection.
+Root exit may win the first-trigger latch, but a later cleanup failure records
+separate issues and forces FAILED without rewriting that exit evidence.
+
+All public evidence mutations share the domain condition lock. No backend
+callback runs under it. Future external acquisition/release/wait operations
+must run outside that lock and report their results through this contract.
+The injected clock must be finite and monotonic. Frozen snapshots are detached
+from later mutations and contain no request/step/approval authority.
+
+D1b0 terminal lifecycle/runtime code creates zero child processes, and no new
+terminal-related test invokes a real backend or process. Existing unrelated
+tests may launch their established isolated-import verification interpreter;
+the complete repository is not claimed to create zero children.
 
 ## Versions and prepared authority
 
@@ -132,6 +284,14 @@ completeness. Preserve order within each stream only, no cross-stream total orde
 Pending reads require safe ownership/cancellation/completion; never abandon or
 free their resources unsafely. No pipe code exists here.
 
+Reviewed D1b v1 direction: local named byte pipes, overlapped parent reads,
+synchronous child writers, zero reader threads, one pending read per stream.
+Connection/security/ABI/cancellation safety must be proved in D1b/D2/D3; no
+pipe or capture implementation is introduced by D1b0. These mechanics implement
+the already-approved retention/decoding/containment policy; they do not add launch
+authority or alter target/v2 identity. A material policy change still requires
+explicit versioning, rather than silently reinterpreting an existing approval.
+
 UTF-8 with replacement (errors="replace"), utf8-replace/v1: no locale/OEM
 guessing, no child-environment mutation. Report encoding/error policy, byte
 counts/truncation/completeness. OEM/ANSI/invalid output may lose meaning.
@@ -147,8 +307,10 @@ disables further launches. No timers/processes implemented here.
 
 ## Future Job, handle, flags and resource controls
 
-One fresh Job Object per invocation. Containment AT creation via an appropriate
-creation-time Job-list mechanism; kill-on-last-handle-close, no breakaway,
+One fresh Job Object per invocation. Containment AT creation via
+PROC_THREAD_ATTRIBUTE_JOB_LIST, CREATE_SUSPENDED and membership confirmation
+before resume; no delayed-assignment fallback and no breakaway fallback.
+Use kill-on-last-handle-close, no breakaway,
 noninheritable Job handle. Ordinary descendants remain contained. Root exit is
 not cleanup completion: remaining descendants require termination AND FAILED.
 Unsupported/nested-Job failures never fall back to uncontained launch. Brokered
@@ -157,14 +319,42 @@ ordinary-descendant ownership guarantee, not a sandbox.
 
 Restrict inherited handles with an explicit allowlist: stdin NUL, stdout writer,
 stderr writer ONLY. Never Job/process/thread/executable-verification/cwd-
-verification/parent-read-pipe/synchronization/event handles. A BLOCKER before
-D1G-D2: real sentinel-handle and concurrent-creation inheritance tests.
+verification/parent-read-pipe/synchronization/event handles. Before the first
+D1G-D2 child, require fake lifecycle/failure/ownership accounting, ABI review,
+mocked native marshaling and handle-list/Job-list arguments, capture/deadline/
+cancellation/poison tests and full regressions. D1b0/D1b terminal runtime tests
+never invoke the live backend or launch terminal children. Existing unrelated
+isolated-import interpreter tests are explicitly permitted and accounted for.
+Only D2 may perform native preflight resource checks before its first controlled
+child. Real sentinel-handle and concurrent-creation inheritance
+tests require children and belong to D2/D3 before readiness/activation; they
+cannot be prerequisites to the phase permitted to create the first child.
 
 Symbolic flags: CREATE_SUSPENDED (setup before resume),
 EXTENDED_STARTUPINFO_PRESENT (explicit handle/Job lists),
 CREATE_UNICODE_ENVIRONMENT (frozen Unicode block), CREATE_NO_WINDOW (console
 detachment). No DETACHED_PROCESS/CREATE_NEW_CONSOLE/CREATE_BREAKAWAY_FROM_JOB,
 debugger or process-group flags. No Win32 flags/APIs are executed here.
+
+Future ownership categories (abstract reservations today, not live handles):
+
+| Resource category | Owner / future release boundary |
+| --- | --- |
+| Executable/cwd verification | Invocation ledger; noninherited, retained through creation |
+| Job | Invocation ledger; noninherited, after containment confirmation |
+| NUL/stdout/stderr child ends | Invocation ledger; exact three-entry inheritance list; parent copies released after creation |
+| Parent pipe ends | Invocation ledger; noninherited, after read completion/cancellation confirmation |
+| Process/primary thread | Preallocated creation receipt slots; process after exit, thread after confirmed resume handling |
+| Read buffers/events/completion resources | Invocation ledger and explicit pending-operation dependencies; never freed while pending |
+| Attribute-list backing resources | Invocation ledger; noninherited, retained through creation/attribute deletion obligations |
+
+Backend primitives borrow resources and return supplied evidence; they do not
+invisibly close runtime-owned resources. Compound partial construction must
+register each acquired resource immediately. Backend-local temporary ownership
+must also be explicit and transferred before a fallible return. There is no
+garbage-collection, destructor, background reaper or automatic retry correctness
+dependency. Uncertain release or unfinished native work transfers to quarantine
+and poisons the shared domain, even for P0 before any process was created.
 
 One active invocation per runtime instance; bounded inputs/retention and fixed
 owned parent handles/two pending bounded reads. Job count/committed-memory

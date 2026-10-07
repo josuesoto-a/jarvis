@@ -1,4 +1,4 @@
-"""D1G-D1b0: non-executing terminal lifecycle and ownership infrastructure.
+"""D1G-D1b0/D1b1a: non-executing terminal lifecycle and ownership evidence.
 
 This module records evidence supplied by a future backend; it does not acquire,
 release, launch, resume, wait for, or terminate any OS resource. Admission is
@@ -54,6 +54,7 @@ class CreationClassification(str, Enum):
     PRE_CREATE = "P0"
     CREATE_CALL_FAILED = "C1"
     PROCESS_CREATED = "P1"
+    CREATE_OUTCOME_UNCERTAIN = "CU"
 
 
 class OwnershipState(str, Enum):
@@ -109,8 +110,14 @@ class ResourceIdentity:
 
 @dataclass(frozen=True, slots=True)
 class CreationSnapshot:
+    """Derived creation evidence, not a claim of native-call atomicity.
+
+    process_created means successful creation has been confirmed. False in CU
+    does not exclude process existence; result_pending distinguishes CU from C1.
+    """
+
     call_count: int
-    classification: CreationClassification | None
+    classification: CreationClassification
     process_created: bool
     result_pending: bool
     process_attached: bool
@@ -124,7 +131,7 @@ class CreationSnapshot:
         )):
             raise TypeError("creation evidence flags must be Boolean")
         expected = (CreationClassification.PROCESS_CREATED if self.process_created else
-                    None if self.result_pending else
+                    CreationClassification.CREATE_OUTCOME_UNCERTAIN if self.result_pending else
                     CreationClassification.CREATE_CALL_FAILED if self.call_count else
                     CreationClassification.PRE_CREATE)
         if self.classification is not expected:
@@ -160,8 +167,13 @@ class CleanupEvidence:
     process_exited: bool
     containment_empty: bool
     quarantine_transferred: bool
+    job_empty: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.job_empty) is not bool:
+            raise TypeError("Job-empty evidence must be Boolean")
+        if self.job_empty and not self.creation.call_count:
+            raise ValueError("Job-empty evidence requires a creation attempt")
         if not self.creation.process_created and (self.process_exited or self.containment_empty):
             raise ValueError("exit/containment evidence requires successful creation")
         if self.containment_empty and not self.process_exited:
@@ -207,7 +219,13 @@ class TerminalRuntimeOutcome:
 
     @property
     def process_created(self) -> bool:
+        """Confirmed success only; inspect creation_classification for CU."""
         return self.cleanup.creation.process_created
+
+    @property
+    def creation_classification(self) -> CreationClassification:
+        """Expose the receipt's classification without an independent status."""
+        return self.cleanup.creation.classification
 
     @property
     def process_exited(self) -> bool:
@@ -240,6 +258,7 @@ class InvocationSnapshot:
     containment_empty: bool
     quarantine_reason: QuarantineReason | None
     quarantine_resolved: bool
+    job_empty: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -561,7 +580,7 @@ class CreationReceipt:
 
     Success is latched before returned resources are individually attached to
     preallocated ledger slots. Incomplete adoption prevents healthy completion.
-    A call with no reported result is NOT C1. Late reports may supply facts to
+    A call with no reported result is CU, not C1. Late reports may supply facts to
     the quarantine owner; they never reopen admission or change terminal phase.
 
     This is a Python evidence contract, not proof of exception-safe native
@@ -580,7 +599,8 @@ class CreationReceipt:
         pending = self._attempted and not self._failed and not created
         classification = (CreationClassification.PROCESS_CREATED if created else
                           CreationClassification.CREATE_CALL_FAILED if self._failed else
-                          None if pending else CreationClassification.PRE_CREATE)
+                          CreationClassification.CREATE_OUTCOME_UNCERTAIN if pending else
+                          CreationClassification.PRE_CREATE)
         resources = self._invocation.resources._resources
         return CreationSnapshot(int(self._attempted), classification, created, pending,
                                 resources["root-process"]._payload is not None,
@@ -606,7 +626,9 @@ class CreationReceipt:
             return True
 
     def _check_pending(self) -> None:
-        if not self._snapshot_unlocked().result_pending:
+        # Scalar guard: do not construct evidence snapshots before latching a
+        # known result. This narrows the Python boundary, not native atomicity.
+        if not self._attempted or self._failed or self._success:
             raise TerminalLifecycleError("creation result is not pending")
 
     def record_failed(self) -> None:
@@ -711,6 +733,7 @@ class TerminalInvocation:
         self._resume_committed = False
         self._exited = False
         self._containment_empty = False
+        self._job_empty = False
         self._quarantine_resolved = False
         self._creation = CreationReceipt(self, _key=_ISSUED)
         self._resources = ResourceLedger(self, _key=_ISSUED)
@@ -817,6 +840,20 @@ class TerminalInvocation:
             if not self._exited or self._phase not in {InvocationPhase.CLEANING, InvocationPhase.QUARANTINED}:
                 raise TerminalLifecycleError("containment cannot be confirmed empty")
             self._containment_empty = True
+            self._job_empty = True
+
+    def confirm_job_empty(self) -> None:
+        """Record supplied Job evidence without inferring creation or root exit.
+
+        CU recovery can use an already-owned Job while root evidence remains
+        unavailable. This performs no query and cannot resolve the receipt.
+        P1 still requires explicit root-exit and containment confirmations.
+        """
+        with self._domain._condition:
+            if (self._phase not in {InvocationPhase.CLEANING, InvocationPhase.QUARANTINED}
+                    or not self.creation._attempted or self.creation._failed):
+                raise TerminalLifecycleError("Job emptiness requires P1 or CU cleanup")
+            self._job_empty = True
 
     def begin_cleanup(self, reason: CleanupReason) -> None:
         if type(reason) is not CleanupReason:
@@ -867,6 +904,7 @@ class TerminalInvocation:
                 self._phase, self.creation._snapshot_unlocked(), self.resources.snapshot(),
                 len(self.resources._pending), self._exited, self._containment_empty,
                 self.resources._quarantine_owner is not None,
+                self._job_empty,
             )
 
     def outcome(self) -> TerminalRuntimeOutcome:
@@ -927,6 +965,7 @@ class TerminalInvocation:
                 len(self.resources._pending), self._cancellation_reason, self._cleanup_reason,
                 self._execution_deadline, self._cleanup_deadline, self._resumed, self._exited,
                 self._containment_empty, self._quarantine_reason, self._quarantine_resolved,
+                self._job_empty,
             )
 
 

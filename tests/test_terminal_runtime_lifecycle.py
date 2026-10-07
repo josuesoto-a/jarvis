@@ -1,4 +1,4 @@
-"""D1G-D1b0: inert evidence, ownership and concurrency tests; no backend."""
+"""D1G-D1b0/D1b1a: inert evidence, ownership and concurrency; no backend."""
 
 import ast
 from concurrent.futures import ThreadPoolExecutor
@@ -202,7 +202,8 @@ def test_pending_call_is_not_misrepresented_as_p0_or_c1(setup):
     assert invocation.commit_creation() and invocation.creation.begin_call()
     snap = invocation.creation.snapshot()
     assert snap.call_count == 1 and snap.result_pending
-    assert snap.classification is None and not snap.process_created
+    assert snap.classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+    assert not snap.process_created
     with pytest.raises(TerminalLifecycleError):
         invocation.begin_cleanup(CleanupReason.CREATE_CALL_FAILED)
     invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
@@ -518,6 +519,10 @@ def test_late_creation_report_in_quarantine_preserves_phase_and_poison(setup, su
     assert invocation.commit_creation() and invocation.creation.begin_call()
     invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
     invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+    invocation.confirm_job_empty()
+    uncertain = invocation.cleanup_evidence()
+    assert uncertain.job_empty and not uncertain.process_exited
+    assert uncertain.creation.classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
     if success:
         invocation.creation.record_success((Token(), Token()))
         assert not invocation.adopt_created()
@@ -982,14 +987,14 @@ def test_generations_ignore_reused_backend_values_and_are_domain_scoped(setup):
 
 
 @pytest.mark.parametrize("classification", list(CreationClassification))
-def test_p0_c1_p1_have_distinct_irreversible_evidence_and_no_retry(setup, classification):
+def test_p0_c1_p1_cu_have_distinct_evidence_and_no_retry(setup, classification):
     _, domain, invocation = setup
     preflight = own(invocation, "preflight-resource")
     if classification is not CreationClassification.PRE_CREATE:
         assert invocation.commit_creation() and invocation.creation.begin_call()
         if classification is CreationClassification.CREATE_CALL_FAILED:
             invocation.creation.record_failed()
-        else:
+        elif classification is CreationClassification.PROCESS_CREATED:
             invocation.creation.record_success()
             invocation.creation.attach_process(Token())
             invocation.creation.attach_thread(Token())
@@ -1001,6 +1006,7 @@ def test_p0_c1_p1_have_distinct_irreversible_evidence_and_no_retry(setup, classi
         CreationClassification.PRE_CREATE: CleanupReason.PREFLIGHT_FAILURE,
         CreationClassification.CREATE_CALL_FAILED: CleanupReason.CREATE_CALL_FAILED,
         CreationClassification.PROCESS_CREATED: CleanupReason.POST_CREATE_FAILURE,
+        CreationClassification.CREATE_OUTCOME_UNCERTAIN: CleanupReason.CREATION_UNCERTAIN,
     }[classification]
     invocation.begin_cleanup(reason)
     for action in (invocation.commit_creation, invocation.creation.begin_call):
@@ -1010,12 +1016,21 @@ def test_p0_c1_p1_have_distinct_irreversible_evidence_and_no_retry(setup, classi
         invocation.confirm_process_exited()
         invocation.confirm_containment_empty()
     release_all(invocation)
-    invocation.finish_cleanup()
+    uncertain = classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+    if uncertain:
+        invocation.confirm_job_empty()
+        with pytest.raises(TerminalLifecycleError):
+            invocation.finish_cleanup()
+        invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+    else:
+        invocation.finish_cleanup()
     assert preflight.snapshot().state is OwnershipState.RELEASED
     assert invocation.creation.snapshot() == receipt
-    assert invocation.outcome().cleanup_completed
+    assert invocation.outcome().creation_classification is classification
+    assert invocation.outcome().cleanup_completed is not uncertain
     assert invocation.outcome().disposition is RuntimeDisposition.FAILED
-    assert domain.snapshot().state is LaunchAdmissionState.OPEN
+    assert domain.snapshot().state is (LaunchAdmissionState.POISONED if uncertain
+                                       else LaunchAdmissionState.OPEN)
 
 
 def test_partial_construction_mixed_release_has_exact_accounting(setup):
@@ -1347,3 +1362,302 @@ def test_definite_failure_to_release_preserves_owned_state_without_blind_retry(s
     assert domain.snapshot().state is LaunchAdmissionState.POISONED
     with pytest.raises(TerminalLifecycleError):
         domain.quarantine_owner.begin_release(resource)
+
+
+# D1b1a refines evidence only: Tokens below are Python identities, not handles.
+
+@pytest.mark.parametrize("classification,count,created,pending", [
+    (CreationClassification.PRE_CREATE, 0, False, False),
+    (CreationClassification.CREATE_CALL_FAILED, 1, False, False),
+    (CreationClassification.PROCESS_CREATED, 1, True, False),
+    (CreationClassification.CREATE_OUTCOME_UNCERTAIN, 1, False, True),
+])
+def test_creation_snapshot_classification_matches_exact_evidence(classification, count, created, pending):
+    snapshot = lifecycle.CreationSnapshot(count, classification, created, pending, False, False)
+    assert snapshot.classification is classification
+    assert snapshot.call_count == count
+    assert snapshot.process_created is created
+    assert snapshot.result_pending is pending
+    for other in (*CreationClassification, None, classification.value):
+        if other is not classification:
+            with pytest.raises(ValueError):
+                replace(snapshot, classification=other)
+
+
+@pytest.mark.parametrize("count,created,pending,process,thread", [
+    (-1, False, False, False, False), (2, False, False, False, False),
+    (True, False, False, False, False), (0, True, False, False, False),
+    (0, False, True, False, False), (1, True, True, False, False),
+    (0, False, False, True, False), (0, False, False, False, True),
+    (1, False, True, True, False), (1, False, True, False, True),
+    (1, False, False, True, False), (1, False, False, False, True),
+])
+def test_impossible_creation_evidence_cannot_be_given_a_classification(count, created, pending, process, thread):
+    for classification in CreationClassification:
+        with pytest.raises(ValueError):
+            lifecycle.CreationSnapshot(count, classification, created, pending, process, thread)
+
+
+@pytest.mark.parametrize("result", ["record_success", "record_failed"])
+def test_known_result_commit_does_not_depend_on_snapshot_construction(setup, monkeypatch, result):
+    _, _, invocation = setup
+    assert invocation.commit_creation() and invocation.creation.begin_call()
+
+    def unavailable_snapshot(*args, **kwargs):
+        raise MemoryError("evidence snapshot allocation unavailable")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(lifecycle, "CreationSnapshot", unavailable_snapshot)
+        getattr(invocation.creation, result)()
+    expected = (CreationClassification.PROCESS_CREATED if result == "record_success"
+                else CreationClassification.CREATE_CALL_FAILED)
+    assert invocation.creation.snapshot().classification is expected
+
+
+@pytest.mark.parametrize("fault", [MemoryError, KeyboardInterrupt, SystemExit])
+def test_known_success_precedes_fallible_payload_adoption(setup, monkeypatch, fault):
+    _, _, invocation = setup
+    assert invocation.commit_creation() and invocation.creation.begin_call()
+
+    def unavailable_adoption(payload):
+        raise fault("synthetic failure after success latch")
+
+    monkeypatch.setattr(invocation.resources, "_unique_payload", unavailable_adoption)
+    with pytest.raises(fault):
+        invocation.creation.record_success((Token(), Token()))
+    snapshot = invocation.creation.snapshot()
+    assert snapshot.classification is CreationClassification.PROCESS_CREATED
+    assert snapshot.process_created and not snapshot.adoption_complete
+    invocation.begin_cleanup(CleanupReason.POST_CREATE_FAILURE)
+    invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+    assert invocation.outcome().creation_classification is CreationClassification.PROCESS_CREATED
+    assert not invocation.outcome().cleanup_completed
+
+
+def test_creation_uses_preexisting_process_thread_owners_without_new_identities(setup, monkeypatch):
+    _, domain, invocation = setup
+    names = ("root-process", "primary-thread")
+    owners = tuple(invocation.resources.resource(name) for name in names)
+    identities = tuple(owner.snapshot().identity for owner in owners)
+    assert all(owner.snapshot().state is OwnershipState.RESERVED for owner in owners)
+    assert invocation.creation.snapshot().classification is CreationClassification.PRE_CREATE
+
+    def forbidden_identity(kind):
+        raise AssertionError("creation must reuse its preallocated identities")
+
+    monkeypatch.setattr(domain, "_resource_identity_unlocked", forbidden_identity)
+    assert invocation.commit_creation() and invocation.creation.begin_call()
+    assert invocation.creation.snapshot().classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+    invocation.creation.record_success()
+    invocation.creation.attach_process(Token())
+    invocation.creation.attach_thread(Token())
+    assert tuple(invocation.resources.resource(name) for name in names) == owners
+    assert tuple(owner.snapshot().identity for owner in owners) == identities
+    assert all(owner.snapshot().state is OwnershipState.OWNED for owner in owners)
+    assert invocation.creation.snapshot().adoption_complete
+
+
+@pytest.mark.parametrize("quarantined", [False, True])
+def test_cu_job_empty_without_root_exit_never_completes_cleanup(setup, quarantined):
+    _, domain, invocation = setup
+    own(invocation, "retained-creation-storage")
+    assert invocation.commit_creation() and invocation.creation.begin_call()
+    invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
+    before = invocation.snapshot()
+    if quarantined:
+        invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+    invocation.confirm_job_empty()
+    invocation.confirm_job_empty()  # Repeated supplied evidence is idempotent.
+    release_all(invocation)
+    evidence = invocation.cleanup_evidence()
+    assert evidence.job_empty and invocation.snapshot().job_empty
+    assert not evidence.process_exited and not evidence.containment_empty
+    assert evidence.creation.classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+    assert evidence.creation.call_count == 1 and evidence.creation.result_pending
+    assert not evidence.creation.process_created and not evidence.creation.adoption_complete
+    assert not evidence.cleanup_completed
+    assert invocation.snapshot().cleanup_reason is before.cleanup_reason
+    assert invocation.snapshot().cleanup_deadline == before.cleanup_deadline
+    with pytest.raises(TerminalLifecycleError):
+        invocation.finish_cleanup()
+    if not quarantined:
+        invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+    outcome = invocation.outcome()
+    assert outcome.creation_classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+    assert outcome.disposition is RuntimeDisposition.FAILED
+    assert not outcome.process_created and not outcome.process_resumed and not outcome.process_exited
+    assert not outcome.cleanup_completed
+    with pytest.raises(TerminalLifecycleError):
+        domain.quarantine_owner.confirm_resolved()
+    assert domain.snapshot().state is LaunchAdmissionState.POISONED
+    with pytest.raises(LaunchAdmissionError):
+        domain.admit()
+
+
+def test_cu_first_trigger_and_no_resume_retry_survive_later_events(setup):
+    clock, domain, invocation = setup
+    assert invocation.commit_creation() and invocation.creation.begin_call()
+    invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
+    original = invocation.snapshot()
+    assert domain.cancel_active()
+    clock.now = original.execution_deadline
+    invocation.begin_cleanup(CleanupReason.CANCELLED)
+    invocation.begin_cleanup(CleanupReason.EXECUTION_TIMEOUT)
+    invocation.begin_cleanup(CleanupReason.ROOT_EXIT)
+    invocation.confirm_job_empty()
+    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+    for action in (invocation.creation.begin_call, invocation.commit_creation,
+                   invocation.adopt_created, invocation.commit_resume, invocation.record_resumed,
+                   invocation.confirm_process_exited, invocation.confirm_containment_empty,
+                   lambda: invocation.creation.attach_process(Token()),
+                   lambda: invocation.creation.attach_thread(Token())):
+        with pytest.raises(TerminalLifecycleError):
+            action()
+    snapshot = invocation.snapshot()
+    assert snapshot.cleanup_reason is CleanupReason.CREATION_UNCERTAIN
+    assert snapshot.cleanup_deadline == original.cleanup_deadline
+    assert not snapshot.process_exited and not snapshot.process_resumed
+    assert snapshot.creation == original.creation
+    invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+    assert invocation.outcome().terminal_trigger is CleanupReason.CREATION_UNCERTAIN
+    assert invocation.outcome().disposition is RuntimeDisposition.FAILED
+    assert not invocation.outcome().cleanup_completed
+
+
+def test_cu_quarantine_retains_responsibility_and_revokes_old_ledger():
+    domain = LaunchAdmissionDomain()
+    invocation = domain.admit()
+    token = Token()
+    resource = own(invocation, "unresolved-storage", token)
+    invocation_ref, token_ref = weakref.ref(invocation), weakref.ref(token)
+    assert invocation.commit_creation() and invocation.creation.begin_call()
+    invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
+    invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+    for action in (lambda: invocation.resources.borrow(resource),
+                   lambda: invocation.resources.begin_release(resource),
+                   lambda: invocation.resources.reserve("new-resource")):
+        with pytest.raises(TerminalLifecycleError):
+            action()
+    del invocation, token, resource
+    gc.collect()
+    assert domain.quarantined_invocation is invocation_ref()
+    assert token_ref() is not None
+    assert domain.quarantine_owner.creation.snapshot().classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+    domain.quarantined_invocation.confirm_job_empty()
+    assert not domain.quarantined_invocation.outcome().cleanup_completed
+    assert domain.shutdown().state is LaunchAdmissionState.POISONED
+    with pytest.raises(LaunchAdmissionError):
+        domain.admit()
+
+
+def test_cu_quarantine_admission_race_never_reopens_domain(setup):
+    _, domain, invocation = setup
+    assert invocation.commit_creation() and invocation.creation.begin_call()
+    invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
+    barrier, transferred = Barrier(3), Event()
+
+    def transfer():
+        barrier.wait(timeout=5)
+        invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+        transferred.set()
+
+    def contend():
+        barrier.wait(timeout=5)
+        with pytest.raises(LaunchAdmissionError):
+            domain.admit()
+        assert transferred.wait(timeout=5)
+        with pytest.raises(LaunchAdmissionError, match="poisoned"):
+            domain.admit()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tasks = pool.submit(transfer), pool.submit(contend)
+        barrier.wait(timeout=5)
+        for task in tasks:
+            task.result(timeout=5)
+    invocation.confirm_job_empty()
+    assert domain.snapshot().state is LaunchAdmissionState.POISONED
+    assert invocation.outcome().creation_classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+
+
+@pytest.mark.parametrize("classification", [CreationClassification.PRE_CREATE,
+                                             CreationClassification.CREATE_CALL_FAILED,
+                                             CreationClassification.CREATE_OUTCOME_UNCERTAIN,
+                                             CreationClassification.PROCESS_CREATED])
+def test_job_empty_requires_cleanup_and_p1_or_cu_evidence(setup, classification):
+    _, _, invocation = setup
+    if classification is not CreationClassification.PRE_CREATE:
+        assert invocation.commit_creation() and invocation.creation.begin_call()
+        if classification is CreationClassification.CREATE_CALL_FAILED:
+            invocation.creation.record_failed()
+        elif classification is CreationClassification.PROCESS_CREATED:
+            invocation.creation.record_success((Token(), Token()))
+    with pytest.raises(TerminalLifecycleError):
+        invocation.confirm_job_empty()
+    reason = {CreationClassification.PRE_CREATE: CleanupReason.PREFLIGHT_FAILURE,
+              CreationClassification.CREATE_CALL_FAILED: CleanupReason.CREATE_CALL_FAILED,
+              CreationClassification.CREATE_OUTCOME_UNCERTAIN: CleanupReason.CREATION_UNCERTAIN,
+              CreationClassification.PROCESS_CREATED: CleanupReason.POST_CREATE_FAILURE}[classification]
+    invocation.begin_cleanup(reason)
+    if classification in {CreationClassification.PRE_CREATE, CreationClassification.CREATE_CALL_FAILED}:
+        with pytest.raises(TerminalLifecycleError):
+            invocation.confirm_job_empty()
+    else:
+        invocation.confirm_job_empty()
+        assert invocation.cleanup_evidence().job_empty
+        assert not invocation.cleanup_evidence().process_exited
+        with pytest.raises(TerminalLifecycleError):
+            invocation.finish_cleanup()
+
+
+def test_p1_job_empty_does_not_replace_root_and_containment_confirmation(setup):
+    _, _, invocation = setup
+    running(invocation)
+    invocation.begin_cleanup(CleanupReason.POST_CREATE_FAILURE)
+    invocation.confirm_job_empty()
+    release_all(invocation)
+    with pytest.raises(TerminalLifecycleError):
+        invocation.finish_cleanup()
+    invocation.confirm_process_exited()
+    with pytest.raises(TerminalLifecycleError):
+        invocation.finish_cleanup()
+    invocation.confirm_containment_empty()
+    invocation.finish_cleanup()
+    assert invocation.cleanup_evidence().job_empty
+    assert invocation.cleanup_evidence().containment_empty
+
+
+def test_cleanup_evidence_rejects_fabricated_job_empty_before_attempt(setup):
+    _, _, invocation = setup
+    finish_preflight(invocation)
+    evidence = invocation.cleanup_evidence()
+    with pytest.raises(ValueError):
+        replace(evidence, job_empty=True)
+    with pytest.raises(TypeError):
+        replace(evidence, job_empty=1)
+
+
+def test_c1_and_cu_outcomes_expose_distinct_derived_classifications():
+    outcomes = []
+    for known_failure in (True, False):
+        domain = LaunchAdmissionDomain()
+        invocation = domain.admit()
+        assert invocation.commit_creation() and invocation.creation.begin_call()
+        if known_failure:
+            invocation.creation.record_failed()
+            invocation.begin_cleanup(CleanupReason.CREATE_CALL_FAILED)
+            invocation.finish_cleanup()
+        else:
+            invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
+            invocation.confirm_job_empty()
+            invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN)
+        outcomes.append(invocation.outcome())
+    failed, uncertain = outcomes
+    assert not failed.process_created and not uncertain.process_created
+    assert failed.creation_classification is CreationClassification.CREATE_CALL_FAILED
+    assert uncertain.creation_classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN
+    assert uncertain.cleanup.creation.result_pending and not failed.cleanup.creation.result_pending
+    assert failed.cleanup_completed and not uncertain.cleanup_completed
+    # The classification is derived, not an independently replaceable field.
+    with pytest.raises(TypeError):
+        replace(uncertain, creation_classification=CreationClassification.CREATE_CALL_FAILED)
+    assert uncertain.creation_classification is CreationClassification.CREATE_OUTCOME_UNCERTAIN

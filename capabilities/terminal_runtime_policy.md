@@ -1,8 +1,9 @@
-# Terminal runtime contract (D1G-D1a / D1G-D1b0, non-executing)
+# Terminal runtime contract (D1G-D1a / D1G-D1b0 / D1G-D1b1a, non-executing)
 
 D1G-A established preparation/approval/recording continuation. D1G-C registered
 terminal local approval presentation only. D1G-D1a hardens pure contracts.
 D1G-D1b0 adds pure lifecycle/ownership accounting in terminal_runtime.py.
+D1G-D1b1a formalizes creation uncertainty and independent Job-empty evidence.
 No launch/capture/containment implementation exists here. No terminal process
 handler, default runtime, planner activation or bootstrap execution wiring.
 D1G-D1b implements an unregistered backend; D1G-D2 is the first real process gate,
@@ -77,9 +78,9 @@ is conservatively classified as timeout; exact OS exit chronology is not known.
 | Creation classification | Exact recorded evidence |
 | --- | --- |
 | P0 / PRE_CREATE | Zero creation-call attempts |
-| C1 / CREATE_CALL_FAILED | One attempt, explicitly reported failure, no created process |
+| C1 / CREATE_CALL_FAILED | One attempt, explicitly reported failure; result no longer pending |
 | P1 / PROCESS_CREATED | One attempt, explicitly reported success; ownership mandatory |
-| Unresolved (classification null) | One attempt with no reported result; neither P0 nor C1 |
+| CU / CREATE_OUTCOME_UNCERTAIN | One attempt with unavailable/uncommitted result; success cannot be excluded |
 
 The preallocated CreationReceipt has reserved root-process and primary-thread
 owners. record_success() permanently records native success BEFORE resource
@@ -93,8 +94,24 @@ resource. Missing attachment is explicit and blocks FINISHED, including when
 root exit and empty containment have been reported. Success cannot be overwritten,
 failed, retried or reset. An unresolved call is neither C1 nor safe completion;
 late evidence in quarantine does not reopen admission or change terminal phase.
-The future native backend must still prove exception-safe capture of native
-success before this Python recording boundary. D1b0 does not prove that ABI.
+Creation classification is derived from guarded receipt evidence and is exposed
+by TerminalRuntimeOutcome.creation_classification. process_created means
+successful creation has been confirmed. False in CU is NOT definite absence of
+a process; C1 and CU are distinguished by classification and result_pending.
+The scalar pending guard constructs no snapshot before the success latch.
+Prebound process/thread identities exist before the attempt; adoption uses those
+slots without requiring new logical identities after success. This narrows the
+Python commit path but does not prove allocation-free execution or atomicity
+with a future native call. Native storage integration remains D1b work.
+
+Recording the first attempt exposes CU until an authoritative result is recorded.
+Known failure resolves that pending evidence to C1; known success permanently
+latches P1 before optional payload validation/attachment. CU itself never permits
+resume, retry, successful completion or admission restoration. Reporting Job
+emptiness, releasing known resources or reaching a deadline cannot resolve CU.
+Receipt late-fact channels remain available after quarantine: actual late return
+evidence may resolve the receipt, but never changes the terminal phase, permits
+resume, makes cleanup_completed true or reopens the poisoned domain.
 
 ResourceLedger reserves ownership slots before acquisition. adopt() attaches
 one opaque payload immediately; raw scalar handle values are not the ownership
@@ -126,7 +143,15 @@ operations, acquire resources or turn QUARANTINED into FINISHED.
 
 FINISHED requires a resolved, fully adopted creation receipt, all acquired resources released,
 no borrows/pending operations, and (for P1) observed root exit plus confirmed
-empty containment. Root exit alone is insufficient. Unconfirmed cleanup
+empty containment. Root exit alone is insufficient. job_empty is a separate supplied fact from
+process_exited and containment_empty. confirm_job_empty() accepts P1 or CU in
+CLEANING/QUARANTINED without requiring root-exit evidence. It does not imply P1,
+C1, valid process/thread outputs or root exit. P1 still requires explicit root-exit
+and containment confirmations; the separate Job fact cannot substitute for them.
+CU with Job empty and every known resource released still has unresolved creation
+obligations, cannot finish cleanup and must retain responsibility in quarantine.
+The creation_uncertain first trigger cannot be rewritten by later Job evidence.
+Unconfirmed cleanup
 requires quarantine and poison; successful remediation reports resolution but
 never clears poison. A backend must report accurate evidence: this pure model
 does not independently verify supplied facts or perform containment.
@@ -154,10 +179,46 @@ must run outside that lock and report their results through this contract.
 The injected clock must be finite and monotonic. Frozen snapshots are detached
 from later mutations and contain no request/step/approval authority.
 
-D1b0 terminal lifecycle/runtime code creates zero child processes, and no new
+D1b0/D1b1a terminal lifecycle/runtime code creates zero child processes, and no new
 terminal-related test invokes a real backend or process. Existing unrelated
 tests may launch their established isolated-import verification interpreter;
 the complete repository is not claimed to create zero children.
+
+## Reviewed v1 owner-thread and interruption guarantee
+
+The future native terminal lifecycle must have one explicitly designated non-main
+owner thread. The current ActionWorker thread is the natural intended owner;
+D1b must enforce owner-thread affinity before resource acquisition. ActionWorker
+is unchanged in D1b1a. Other threads may request cancellation/shutdown and signal
+wake; they may not manipulate native resources, mutate capture, close handles,
+terminate containment directly or inject exceptions into the owner thread.
+Cancellation remains cooperative. Normal Python SIGINT handling runs on the
+Python main thread; Ctrl+C is not asynchronous KeyboardInterrupt delivery to the
+non-main lifecycle owner. Current worker shutdown does not inject exceptions.
+Application cancellation/shutdown integration remains future work.
+
+Under this supported model, creation storage and process/thread ownership slots
+must be retained before exactly one native creation attempt. An observable known
+successful return must become permanent P1 immediately before other fallible
+lifecycle work. Cancellation and deadlines cannot erase P1. Python/native return
+and receipt mutation are not claimed to be one atomic operation. If return
+evidence is unavailable/uncommitted, CU is the honest classification: never
+resume, retry, lose containment responsibility or reopen admission when successful
+creation cannot be ruled out.
+
+Future CU recovery must use the already-owned creation-time Job, rather than
+trusting uncertain returned process/thread values. Confirming that Job empty
+cannot fabricate root-exit or creation evidence and cannot heal unresolved CU
+into healthy cleanup. Unresolved CU transfers to QuarantineOwner and poisons the
+shared LaunchAdmissionDomain. No Job recovery API is implemented here.
+
+Observed BaseException paths require cleanup/quarantine attempts where possible;
+manual KeyboardInterrupt/SystemExit is distinct from ordinary main-thread signal
+handling. Preallocation reduces avoidable allocation risk but does not guarantee
+MemoryError recovery. Guaranteed recovery excludes hostile asynchronous exception
+injection, catastrophic out-of-memory conditions preventing recovery code, abrupt
+interpreter/process termination, native ABI corruption/access violation and
+OS/kernel failure. No native shim is required for this supported v1 guarantee.
 
 ## Versions and prepared authority
 
@@ -373,13 +434,15 @@ Do not broaden handlers to BLOCKED. No fake process results in D1G-D1a.
 
 Public step data: exit_code (null before observed exit), stdout/stderr,
 timed_out, stdout_truncated, stderr_truncated, execution_started, process_created,
-process_resumed, process_exited, failure_stage, reason_code, cleanup_completed,
+process_resumed, process_exited, creation_classification, failure_stage, reason_code,
+cleanup_completed,
 termination_reason, descendants_terminated, verified_executable_identity (null
 until verified), environment_identity, duration_seconds, serialization_policy,
 decoding_policy, encoding/error policy, retained/observed counts, completeness.
 Do not expose raw handles, full frozen environment or arbitrary local exceptions.
 
-execution_started = successful creation. process_resumed = successful resume,
+execution_started = confirmed successful creation; CU is explicitly uncertain.
+process_resumed = successful resume,
 not proof main() ran/useful work occurred. process_exited = observed root exit;
 cleanup_completed = root + Job cleanup confirmed.
 
@@ -388,7 +451,7 @@ cleanup_completed = root + Job cleanup confirmed.
 | Exit 0 + acceptable capture + complete cleanup | COMPLETED |
 | Nonzero exit / timeout with partial data | FAILED |
 | Integrity mismatch/missing/unreadable executable, zero creation calls | FAILED |
-| Invalid handler target / creation API failure | FAILED |
+| Invalid handler target / creation API failure / unresolved CU | FAILED |
 | Resume/capture/cleanup failure / descendants outlive root | FAILED |
 | Plan/policy/runtime availability blocked before handler | BLOCKED in Executor |
 | Authorization absent | WAITING_FOR_PERMISSION outside runtime |

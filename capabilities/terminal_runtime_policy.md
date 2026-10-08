@@ -1,11 +1,14 @@
-# Terminal runtime contract (D1G-D1a / D1G-D1b0 / D1G-D1b1a, non-executing)
+# Terminal runtime contract (D1G-D1b, unregistered native source; fake-only validation)
 
 D1G-A established preparation/approval/recording continuation. D1G-C registered
 terminal local approval presentation only. D1G-D1a hardens pure contracts.
 D1G-D1b0 adds pure lifecycle/ownership accounting in terminal_runtime.py.
 D1G-D1b1a formalizes creation uncertainty and independent Job-empty evidence.
-No launch/capture/containment implementation exists here. No terminal process
-handler, default runtime, planner activation or bootstrap execution wiring.
+No launch/capture/containment implementation existed through D1b1a.
+D1G-D1b now adds native launch/capture/containment SOURCE and an explicitly
+injected handler. There is no default runtime, planner activation, AUTORIZAR
+execution wiring or bootstrap terminal registration. No D1b test constructs the
+live backend or invokes live Win32 APIs. No terminal child is launched.
 D1G-D1b implements an unregistered backend; D1G-D2 is the first real process gate,
 D3 adversarial tests, D4 lifecycle/readiness and D1G-E explicit activation.
 
@@ -13,7 +16,9 @@ D3 adversarial tests, D4 lifecycle/readiness and D1G-E explicit activation.
 
 This foundation records supplied evidence using opaque Python tokens. It does
 not acquire, release, launch, resume, wait for, or terminate OS resources. There
-is no backend, executing runtime, handler adapter, registration, or activation.
+was no backend, executing runtime or handler adapter in D1b0. D1b now layers
+explicitly injected orchestration over this unchanged evidence foundation;
+registration and activation remain absent.
 Target/preparation/approval versions and identity-bound policies are unchanged.
 
 LaunchAdmissionDomain is explicit and injectable. Every future production
@@ -68,7 +73,7 @@ is the documented recovery boundary, never implicit construction of a runtime.
 There is no general phase setter. Named operations enforce evidence gates. The
 budget starts at admission before preflight. Creation commit and begin_call()
 both check cancellation/deadline; commit_resume() provides the analogous final
-model gate before one future resume attempt. Cancellation after a gate can race
+model gate before one native resume attempt. Cancellation after a gate can race
 an already-committed native call: successful evidence must still be recorded.
 One cleanup deadline is established on entering CLEANING and never reset.
 First cleanup reason is retained; later timeout does not overwrite a timely
@@ -87,8 +92,8 @@ owners. record_success() permanently records native success BEFORE resource
 wrapper validation/attachment. attach_process()/attach_thread() attach each
 distinct opaque payload to its already-registered owner exactly once. The
 optional pair convenience form also records success before pair validation;
-failure there stays P1 with incomplete adoption. The future native bridge must
-use immediate success recording before any fallible marshaling. Interruptions
+failure there stays P1 with incomplete adoption. The D1b native bridge uses
+immediate success recording before any output inspection or fallible attachment. Interruptions
 after success, either attachment or phase adoption preserve P1 and every known
 resource. Missing attachment is explicit and blocks FINISHED, including when
 root exit and empty containment have been reported. Success cannot be overwritten,
@@ -102,7 +107,9 @@ The scalar pending guard constructs no snapshot before the success latch.
 Prebound process/thread identities exist before the attempt; adoption uses those
 slots without requiring new logical identities after success. This narrows the
 Python commit path but does not prove allocation-free execution or atomicity
-with a future native call. Native storage integration remains D1b work.
+with a native call. D1b preallocates native PROCESS_INFORMATION, both opaque
+creation wrappers, all buffers, typed call arguments and creation-time attributes
+before begin_call. Unavailable/uncommitted return evidence remains CU.
 
 Recording the first attempt exposes CU until an authoritative result is recorded.
 Known failure resolves that pending evidence to C1; known success permanently
@@ -164,12 +171,14 @@ remediation later resolves the quarantine. Release uncertainty is never successf
 release; a second blind release attempt is prohibited. A definitely still-owned
 resource stays OWNED until a release attempt has genuinely ambiguous evidence.
 
-TerminalRuntimeOutcome is frozen and lifecycle-only: receipt, resume/exit facts,
-derived cleanup evidence, first terminal trigger and bounded cleanup issues.
-It has no Executor/ActionStatus dependency or fabricated output/exit code.
-Its local COMPLETED disposition means a resumed root-exit lifecycle with complete
-cleanup and no recorded failure, not proof of program exit zero or acceptable
-capture. D1b must add actual execution/capture semantics before result projection.
+TerminalRuntimeOutcome retains frozen lifecycle evidence: receipt, resume/exit
+facts, derived cleanup evidence, first terminal trigger and bounded cleanup issues.
+D1b adds optional frozen TerminalExecutionEvidence with separate capture snapshots.
+Lifecycle-only model callers keep their original semantics. The actual runtime
+always supplies execution evidence: COMPLETED additionally requires observed exit
+zero, complete stdout/stderr capture and no descendant/failure evidence. The
+unregistered handler refuses lifecycle-only outcomes and explicitly projects
+COMPLETED/FAILED into StepExecutionResult. The runtime has no Executor dependency.
 Root exit may win the first-trigger latch, but a later cleanup failure records
 separate issues and forces FAILED without rewriting that exit evidence.
 
@@ -206,11 +215,13 @@ evidence is unavailable/uncommitted, CU is the honest classification: never
 resume, retry, lose containment responsibility or reopen admission when successful
 creation cannot be ruled out.
 
-Future CU recovery must use the already-owned creation-time Job, rather than
+D1b CU recovery uses the already-owned creation-time Job, rather than
 trusting uncertain returned process/thread values. Confirming that Job empty
 cannot fabricate root-exit or creation evidence and cannot heal unresolved CU
 into healthy cleanup. Unresolved CU transfers to QuarantineOwner and poisons the
-shared LaunchAdmissionDomain. No Job recovery API is implemented here.
+shared LaunchAdmissionDomain. D1b requests TerminateJobObject through that known
+Job token and independently queries active process count. The Job, creation
+storage and attribute-list storage remain quarantined in CU, even when empty.
 
 Observed BaseException paths require cleanup/quarantine attempts where possible;
 manual KeyboardInterrupt/SystemExit is distinct from ordinary main-thread signal
@@ -281,7 +292,7 @@ file during preparation. Executable size is bounded to 256 MiB; observed
 size/mtime changes fail. Identity is exactly sha256: plus 64 lowercase hex
 characters. Malformed casing/prefix/length/content fail, never normalize later.
 
-## TOCTOU source of truth (future backend)
+## TOCTOU source of truth (unregistered native backend)
 
 Revalidate executable_identity immediately before launch. Open the approved path
 with restrictive read sharing where compatible, excluding write/delete sharing;
@@ -293,8 +304,8 @@ type and final path. Never replace the approved digest, re-prepare or substitute
 Binary-byte continuity remains unproven: this does NOT prove universal
 byte-for-byte identity of what Windows ultimately loads. Ancestor redirection,
 OS launch configuration, DLLs/plugins and launcher/interpreter dependencies
-remain outside this contract. No restrictive-sharing/Win32 handle implementation
-is added in D1G-D1a.
+remain outside this contract. D1a added no native handle implementation; D1b implements restrictive native
+open/read/final-path evidence through semantic primitives, exercised only by fakes.
 
 ## Argv, cwd and exact environment
 
@@ -332,7 +343,7 @@ not identity ordering/value change. Limit: 32,768 UTF-16 units including
 terminators. Pure target validation/builders perform no ambient/filesystem reads.
 Allowlisted values are not certified secret-free.
 
-## Future stdin, capture, decoding and deadlines
+## Unregistered stdin, capture, decoding and deadlines
 
 stdin=DEVNULL (Windows NUL), no PTY/inherited console input/password service.
 Jarvis provides no interactive stdin; arbitrary programs may still show GUI
@@ -343,12 +354,13 @@ No communicate()-style unbounded buffering; continue draining/discarding excess.
 Report stdout_truncated/stderr_truncated, retained/observed counts and capture
 completeness. Preserve order within each stream only, no cross-stream total order.
 Pending reads require safe ownership/cancellation/completion; never abandon or
-free their resources unsafely. No pipe code exists here.
+free their resources unsafely. D1b now implements these primitives and a pure
+CaptureAccumulator. Counters saturate explicitly at unsigned 64-bit maximum.
 
-Reviewed D1b v1 direction: local named byte pipes, overlapped parent reads,
+Implemented D1b v1 source: local named byte pipes, overlapped parent reads,
 synchronous child writers, zero reader threads, one pending read per stream.
 Connection/security/ABI/cancellation safety must be proved in D1b/D2/D3; no
-pipe or capture implementation is introduced by D1b0. These mechanics implement
+pipe or capture implementation was introduced by D1b0. These mechanics implement
 the already-approved retention/decoding/containment policy; they do not add launch
 authority or alter target/v2 identity. A material policy change still requires
 explicit versioning, rather than silently reinterpreting an existing approval.
@@ -364,9 +376,10 @@ entire Job termination. One shared cleanup budget of 5 seconds covers
 termination/waits/drains/verification on timeout, failure AND ordinary exit.
 Windows/filesystem/kernel calls may stall: no strict universal wall-clock
 completion guarantee. Unconfirmed cleanup fails, retains safe ownership and
-disables further launches. No timers/processes implemented here.
+disables further launches. D1b enforces these budgets with the injected monotonic domain clock and bounded
+wait primitives; D1b exercises them only through deterministic fakes.
 
-## Future Job, handle, flags and resource controls
+## Unregistered Job, handle, flags and resource controls
 
 One fresh Job Object per invocation. Containment AT creation via
 PROC_THREAD_ATTRIBUTE_JOB_LIST, CREATE_SUSPENDED and membership confirmation
@@ -395,9 +408,9 @@ Symbolic flags: CREATE_SUSPENDED (setup before resume),
 EXTENDED_STARTUPINFO_PRESENT (explicit handle/Job lists),
 CREATE_UNICODE_ENVIRONMENT (frozen Unicode block), CREATE_NO_WINDOW (console
 detachment). No DETACHED_PROCESS/CREATE_NEW_CONSOLE/CREATE_BREAKAWAY_FROM_JOB,
-debugger or process-group flags. No Win32 flags/APIs are executed here.
+debugger or process-group flags. No live Win32 flags/APIs are executed during D1b.
 
-Future ownership categories (abstract reservations today, not live handles):
+D1b ownership categories (opaque native storage, fake-only validation):
 
 | Resource category | Owner / future release boundary |
 | --- | --- |
@@ -421,12 +434,12 @@ One active invocation per runtime instance; bounded inputs/retention and fixed
 owned parent handles/two pending bounded reads. Job count/committed-memory
 ceilings are UNRESOLVED, identity-bound as unresolved-no-activation/v1.
 16 active processes / 512 MiB are candidates only: no real workload evidence
-justifies adoption yet. D1G-D1b/D3 must select/validate actual ceilings and
+justifies adoption yet. D3 or a later separately reviewed activation phase must select/validate actual ceilings and
 version the policy/target before activation; old approvals cannot gain limits.
 No CPU/disk/network/filesystem sandbox, and no bound on total request/result
 retention elsewhere.
 
-## Future results, status and failure atomicity
+## Unregistered results, status and failure atomicity
 
 Keep D1G-A: ordinary mapping means COMPLETED; explicit StepExecutionResult
 accepts COMPLETED/FAILED with structured data preserved through transport.
@@ -477,3 +490,161 @@ Sources: [PE format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-fo
 [Windows creation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw),
 [Job/handle attributes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute),
 [Python final-path behavior](https://bugs.python.org/msg388754).
+
+
+## D1G-D1b module and ownership implementation
+
+terminal.py still owns preparation, target/v2, approved argv serialization and
+exact environment transport. It is unchanged. terminal_runtime.py owns the
+single TerminalBackend protocol, injected WindowsTerminalRuntime, owner checks,
+verification policy/hash/PE checks, capture, deadlines and cleanup orchestration.
+terminal_win32.py owns all ctypes ABI declarations, private native values and
+native primitive calls. terminal_handler.py is an explicitly injected, unregistered
+StepExecutionResult adapter. Production imports/registration are unchanged.
+
+Both runtime and backend compare the designated non-main Thread OBJECT before
+acquisition. Explicit LIVE backend construction also requires that owner before
+loading DLLs; injected fake construction performs no live load. A recycled OS/Python thread ID cannot substitute for that owner.
+ActionWorker's existing non-main thread is the intended future owner; no second
+terminal worker is introduced and ActionWorker itself is unchanged. Other threads
+may request cancellation, shutdown or wake. Requests never invoke native cleanup.
+Native waits are bounded to 20 ms between cooperative observations; wake notification
+is advisory and cannot inject exceptions or operate on native handles.
+
+BackendResourceScope publishes opaque storage to ResourceLedger before every
+native acquisition attempt. It forwards the runtime's preflight checkpoint,
+including within compound stdio/security/attribute setup. Partial native setup
+remains accounted even when the primitive does not return. There is no separate
+native admission, creation classification, quarantine or ownership framework.
+Known failed acquisition leaves an empty releasable wrapper; unavailable acquisition
+results stay owned and require quarantine. Public snapshots contain no raw values.
+Release runs outside the domain lock using one ledger release attempt. Native
+BOOL false / non-null LocalFree failure is definitely still owned; unavailable
+release evidence is RELEASE_UNCERTAIN. Neither gets a blind close/free retry.
+
+Read memory uses HeapAlloc from a retained explicit process-heap allocator identity.
+Each allocation holds one OVERLAPPED plus a fixed 16 KiB buffer; reader/event are
+separate ledger owners. A PendingOperation retains all three dependencies BEFORE
+connect/read submission. Cancellation does not complete it. After known completion,
+rearm_for_drain reuses the SAME already-owned dependency set and operation, including
+in CLEANING; it cannot introduce new resources or operate after quarantine. Generic
+begin_operation still rejects CLEANING. Unknown I/O observation never frees storage.
+No Python destructor, GC finalizer, APC, callback, IOCP or reader thread provides
+correctness. Native memory whose completion is unresolved remains quarantined.
+
+Pipe names use unpredictable UUIDs in the local named-pipe namespace. The server
+is inbound, overlapped, first-instance, byte mode, remote-rejecting, one instance,
+with finite 16 KiB buffers. Thread impersonation is unsupported and fails closed.
+OpenProcessToken/GetTokenInformation obtain exactly one process logon SID. A protected
+SDDL DACL grants that logon identity alone the specific 0x0012019f rights needed by
+the server and its writer; no Everyone/Anonymous ACE or null/default DACL. The
+parent opens the synchronous writer using FILE_WRITE_DATA | SYNCHRONIZE, avoiding
+FILE_CREATE_PIPE_INSTANCE access in that client request. ConnectNamedPipe uses
+owned OVERLAPPED storage even for the expected ERROR_PIPE_CONNECTED case. The
+connected client PID must equal Jarvis's PID; unexpected/pending connection fails
+preflight. This is not a hostile same-logon-user sandbox. D2 must validate actual
+DACL/token/session and connection behavior before any child.
+
+Executable open is GENERIC_READ + FILE_SHARE_READ only; cwd open is
+FILE_READ_ATTRIBUTES + FILE_SHARE_READ | FILE_SHARE_WRITE with backup semantics
+and no delete sharing. Every original is noninheritable. GetFinalPathNameByHandleW
+uses normalized DOS form: remove only the recognized extended DOS prefix and
+normalize the drive letter, validate ordinary local drive syntax, compare every
+remaining character exactly, and reject unsupported drive locality. No broad
+case folding, namespace fallback or alternative share flags. Local removable,
+fixed, CD-ROM and RAM-disk drive types remain eligible subject to the SAME
+approved disk-file/path checks; unknown, absent and remote drives fail closed. Hash, bounded PE
+inspection and metadata comparison use the same executable handle, retained
+with cwd through creation. Byte-continuity and frozen-cwd-content guarantees
+remain expressly unproven.
+
+Job configuration is ONLY JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE. Attribute-list size
+comes from Windows; HeapAlloc backing is initialized with exactly two attributes,
+HANDLE_LIST (exactly three inheritable child-only duplicates) and JOB_LIST (one
+known Job). Both backing arrays live through list deletion. No internal attribute
+list structure is fabricated, no delayed assignment, breakaway or fallback.
+CreateProcessW receives explicit application path, mutable UTF-16 serialized argv,
+exact double-NUL frozen environment and exact cwd. Arguments and binding lookup
+are prepared before begin_call; unavailable call/return commitment remains CU.
+A potentially modified command buffer never replaces target authority.
+
+On known nonzero return, record_success() with NO payload arguments is the first
+commit, before output values, snapshots, cancellation, formatting or attachment.
+Known FALSE records C1. P1 attaches prebound opaque wrappers referencing the retained
+PROCESS_INFORMATION storage. Before the single resume attempt, all parent child-only
+handles and originals are closed, creation-only allocations disposed, Job membership
+confirmed, capture owned, cancellation/deadline rechecked. Only previous suspend
+count exactly one succeeds. CU never reaches output inspection, root query or resume.
+
+Root signal, Job zero count, independent EOF and pending-operation completion are
+separate evidence. Root exit causes Job membership/accounting inspection; observed
+remaining descendants require termination and FAILED, even if root exit was zero.
+Cleanup reserves half of its remaining SINGLE five-second budget for drain, then
+requests cancellation and observes completion in the remaining budget. Repeated
+cancel/shutdown requests never reset it. Read resources release only when settled,
+known process/thread release after exit/containment, verification handles afterward,
+and Job LAST. CU retains known Job and unresolved creation storage for quarantine;
+empty-Job evidence cannot heal CU or reopen shared admission. Existing exclusions
+for catastrophic OOM, interpreter death, hostile exception injection and ABI/kernel
+failure remain; no native/Python atomicity guarantee is claimed.
+
+## D1G-D2 gate: exact diagnostics before any spawning
+
+D1b source/fake validation is not live compatibility evidence. D2 is the first
+phase permitted to intentionally load/call the live backend. Do NOT run these
+checks in D1b. D2 must designate the non-main owner and an explicit diagnostic
+scope with durable shared admission/quarantine responsibility. Every diagnostic
+must account all acquired resources and prove release; uncertainty fails closed.
+
+Required NON-SPAWNING diagnostic sequence:
+
+1. Verify Windows 10/11 x64 workstation, native 64-bit Python/ctypes widths and
+   supported OS/product/architecture; record the actual host and interpreter.
+2. Explicitly construct the live backend and verify every declared kernel32/advapi32
+   symbol/prototype. No process creation or resume call in this diagnostic stage.
+3. Create a fresh unnamed Job, set/query kill-on-close configuration, observe
+   initially empty accounting, then release it with confirmed evidence.
+4. Size/allocate/initialize/update/delete an attribute list containing a one-Job
+   array and exactly three diagnostic child-handle duplicates. Confirm array/list
+   lifetime and allocation release; no CreateProcessW.
+5. Verify process logon-token extraction, impersonation rejection, protected DACL,
+   local/remote rejection, first-instance collision rejection, parent self-connection
+   and client PID check. Inspect actual permissions; broad or unsupported security
+   fails closed. Close synchronous writer originals/duplicates explicitly.
+6. Submit overlapped named-pipe reads with fixed native backing and manual-reset
+   events. Exercise synchronous/asynchronous completion, zero-byte versus EOF,
+   CancelIoEx, ERROR_NOT_FOUND races, GetOverlappedResult completion and confirmed
+   release. Cancel request or kill-on-close alone is not cleanup evidence.
+7. Restrictively open/read/hash the proposed local native console executable
+   through one handle; confirm disk type, bounded PE/size, final path/locality,
+   exact approved digest and actual sharing behavior. Verify failure closes/retains
+   resources without broadening sharing. Do not execute the object.
+8. Open/check/retain/release cwd using the reviewed directory access/share flags;
+   verify final path, directory and locality without claiming frozen contents.
+9. Prepare inheritance verification: confirm parent resources noninheritable,
+   exactly three narrow duplicate handles inheritable, no pseudo/extra handles,
+   flags/STARTUPINFOEX/HANDLE_LIST/JOB_LIST exact, and all diagnostic resources
+   released. Real child/sentinel/concurrent inheritance proof remains spawning
+   D2/D3 work and cannot be claimed from these non-spawning checks.
+
+Only after EVERY diagnostic succeeds and cleanup is confirmed may D2 request
+separate authorization for its FIRST real CreateProcessW: an independently
+verified local Python native console executable with the intentionally harmless
+version argument --version, exact prepared target/cwd/environment, creation-time
+Job and suspended launch. No activation, shell, helper script or fallback.
+Diagnostic completion alone does not authorize that child. A failed/uncertain
+check blocks spawning and retains/poisons ownership as applicable.
+
+Unresolved numerical Job process/memory ceilings, real adversarial containment/
+inheritance/cancellation tests, D4 application shutdown integration, result visibility
+and D1G-E activation remain later gates. They are not invented here and do not
+prevent beginning D2's non-spawning diagnostics after D1b review.
+
+Native review sources: [named-pipe security and logon SID access](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights),
+[creation-time handle/Job attributes and backing lifetime](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute),
+[CreateProcessW ABI and mutable command line](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw),
+[overlapped ReadFile storage/completion](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile),
+[CancelIoEx request versus completion](https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex),
+[ConnectNamedPipe overlapped and already-connected behavior](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-connectnamedpipe).
+
+Drive locality reference: [GetDriveTypeW documented return values](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdrivetypew).

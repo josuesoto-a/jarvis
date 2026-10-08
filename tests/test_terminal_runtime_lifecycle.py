@@ -787,12 +787,13 @@ def test_new_lifecycle_module_has_no_native_or_execution_dependencies():
             imports.update(item.name for item in node.names)
         elif isinstance(node, ast.ImportFrom):
             imports.add(node.module)
-    assert imports <= {"__future__", "dataclasses", "enum", "math", "threading", "time", "typing", "capabilities.terminal"}
-    # No registration, handler, native binding, or launch primitive is reachable.
+    assert imports <= {"__future__", "dataclasses", "enum", "math", "threading", "time", "typing", "capabilities.terminal", "hashlib"}
+    # No native binding/handler import or production registration is introduced.
     assert not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                    and node.func.attr == "register" for node in ast.walk(tree))
-    assert not (root / "capabilities/terminal_win32.py").exists()
-    assert not (root / "capabilities/terminal_handler.py").exists()
+    # D1b adds inert native/adapter source; runtime never imports or constructs it.
+    assert "capabilities.terminal_win32" not in imports
+    assert "capabilities.terminal_handler" not in imports
     assert "terminal" not in (root / "core/bootstrap.py").read_text(encoding="utf-8-sig")
 
 

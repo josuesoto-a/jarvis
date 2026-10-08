@@ -1,7 +1,7 @@
-"""D1G-D1b0/D1b1a: non-executing terminal lifecycle and ownership evidence.
+"""D1G-D1b: lifecycle evidence and explicitly injected terminal orchestration.
 
-This module records evidence supplied by a future backend; it does not acquire,
-release, launch, resume, wait for, or terminate any OS resource. Admission is
+The evidence foundation records supplied facts; the injected runtime orchestrates
+semantic backend primitives without importing native bindings. Admission is
 not authorization. All owners that need process-wide admission MUST share one
 LaunchAdmissionDomain. There is deliberately no default/global domain here.
 
@@ -11,14 +11,22 @@ retains its active invocation and any quarantine, even if callers discard them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from math import isfinite
-from threading import Condition
+from threading import Condition, Thread, current_thread, main_thread
 from time import monotonic
-from typing import Callable
+from typing import Callable, Protocol
 
-from capabilities.terminal import TERMINAL_CLEANUP_SECONDS, TERMINAL_TIMEOUT_SECONDS
+from hashlib import sha256
+
+from capabilities.terminal import (
+    TERMINAL_CLEANUP_SECONDS, TERMINAL_TIMEOUT_SECONDS,
+    TerminalExecutionTarget, TerminalContractError, build_windows_environment_block,
+    serialize_windows_command_line, inspect_windows_console_pe,
+    _validate_local_path_form, TERMINAL_EXECUTABLE_BYTES_LIMIT,
+    TERMINAL_PE_HEADER_BYTES, TERMINAL_READ_CHUNK_BYTES, TERMINAL_STDOUT_BYTES_LIMIT,
+)
 
 
 # Constructor guard only; this is not an admission domain or authorization.
@@ -196,14 +204,23 @@ class CleanupEvidence:
 
 @dataclass(frozen=True, slots=True)
 class TerminalRuntimeOutcome:
-    """Lifecycle-only result. COMPLETED does not assert a program exit code."""
+    """Frozen lifecycle result with optional immutable execution/capture evidence.
+
+    Pure lifecycle callers retain their original semantics. The runtime ALWAYS
+    supplies execution evidence; the handler refuses a lifecycle-only result.
+    """
 
     cleanup: CleanupEvidence
     process_resumed: bool
     terminal_trigger: CleanupReason
     cleanup_issues: tuple[CleanupIssue, ...]
+    execution: TerminalExecutionEvidence | None = None
 
     def __post_init__(self) -> None:
+        if self.execution is not None and type(self.execution) is not TerminalExecutionEvidence:
+            raise TypeError("execution evidence must be immutable and typed")
+        if self.execution is not None and self.execution.exit_code is not None and not self.cleanup.process_exited:
+            raise ValueError("observed exit code requires confirmed root exit")
         if type(self.cleanup) is not CleanupEvidence or type(self.cleanup_issues) is not tuple:
             raise TypeError("outcome requires immutable cleanup evidence/issues")
         if self.cleanup.phase not in {InvocationPhase.FINISHED, InvocationPhase.QUARANTINED}:
@@ -238,7 +255,8 @@ class TerminalRuntimeOutcome:
     @property
     def disposition(self) -> RuntimeDisposition:
         if (self.cleanup_completed and self.process_resumed
-                and self.terminal_trigger is CleanupReason.ROOT_EXIT and not self.cleanup_issues):
+                and self.terminal_trigger is CleanupReason.ROOT_EXIT and not self.cleanup_issues
+                and (self.execution is None or self.execution.acceptable)):
             return RuntimeDisposition.COMPLETED
         return RuntimeDisposition.FAILED
 
@@ -388,6 +406,33 @@ class PendingOperation:
         self._resources = resources
         self._completed = False
         self._cancellation_requested = False
+
+    def rearm_for_drain(self) -> None:
+        """Reuse the SAME bounded read dependencies after known completion.
+
+        Cleanup may continue draining existing capture resources; it may not
+        introduce new dependencies or acquire another operation slot.
+        """
+        with self._ledger._condition:
+            self._ledger._authorize_unlocked()
+            if not self._completed or self._ledger._invocation._phase not in {
+                InvocationPhase.PREFLIGHT, InvocationPhase.CREATED_SUSPENDED,
+                InvocationPhase.RUNNING, InvocationPhase.CLEANING,
+            }:
+                raise TerminalLifecycleError("read operation cannot be rearmed")
+            for resource in self._resources:
+                if resource._state_unlocked() is not OwnershipState.OWNED or resource._pending:
+                    raise TerminalLifecycleError("read dependency unavailable")
+            self._ledger._pending.add(self)
+            self._completed = False
+            self._cancellation_requested = False
+            for resource in self._resources:
+                resource._pending += 1
+
+    @property
+    def completed(self) -> bool:
+        with self._ledger._condition:
+            return self._completed
 
     @property
     def cancellation_requested(self) -> bool:
@@ -1071,3 +1116,602 @@ class LaunchAdmissionDomain:
             self._shutdown_requested = True
             self._cancel_unlocked(CancellationReason.SHUTDOWN)
             return self._snapshot_unlocked()
+
+
+# D1b orchestration depends only on this semantic protocol, never native values.
+
+
+@dataclass(frozen=True, slots=True)
+class FileEvidence:
+    final_path: str
+    size: int
+    directory: bool
+    disk: bool
+    stamp: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ReadResult:
+    completed: bool
+    data: bytes = b""
+    eof: bool = False
+    error: str | None = None
+
+    def __post_init__(self):
+        if (type(self.completed) is not bool or type(self.eof) is not bool
+                or type(self.data) is not bytes or len(self.data) > TERMINAL_READ_CHUNK_BYTES
+                or self.error is not None and (type(self.error) is not str or not self.error
+                                              or len(self.error) > 64)
+                or not self.completed and (self.data or self.eof or self.error)):
+            raise ValueError("invalid bounded read evidence")
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureSnapshot:
+    text: str
+    observed: int
+    retained: int
+    truncated: bool
+    eof: bool
+    complete: bool
+    saturated: bool
+
+
+class CaptureAccumulator:
+    """One bounded byte prefix; decoding happens only on finalization."""
+    def __init__(self):
+        self._prefix = bytearray()
+        self._observed = 0
+        self._eof = False
+        self._incomplete = False
+        self._saturated = False
+        self._final: CaptureSnapshot | None = None
+
+    def accept(self, result: ReadResult):
+        if self._final is not None or self._eof:
+            raise TerminalLifecycleError("capture already ended")
+        if not result.completed:
+            return
+        # Explicit saturation prevents counters growing without bound.
+        maximum = (1 << 64) - 1
+        if len(result.data) > maximum - self._observed:
+            self._saturated = True
+            self._observed = maximum
+        else:
+            self._observed += len(result.data)
+        remaining = TERMINAL_STDOUT_BYTES_LIMIT - len(self._prefix)
+        self._prefix.extend(result.data[:remaining])
+        self._eof = result.eof
+        self._incomplete |= result.error is not None
+
+    def finalize(self, *, pending: bool = False) -> CaptureSnapshot:
+        if self._final is None:
+            retained = len(self._prefix)
+            self._final = CaptureSnapshot(
+                bytes(self._prefix).decode("utf-8", errors="replace"),
+                self._observed, retained, self._saturated or self._observed > retained,
+                self._eof, self._eof and not self._incomplete and not pending,
+                self._saturated,
+            )
+        return self._final
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalExecutionEvidence:
+    exit_code: int | None
+    stdout: CaptureSnapshot
+    stderr: CaptureSnapshot
+    verified_executable_identity: str | None
+    environment_identity: str | None
+    duration_seconds: float
+    failure_stage: str | None
+    reason_code: str | None
+    descendants_terminated: bool
+
+    def __post_init__(self):
+        if (self.exit_code is not None and
+                (type(self.exit_code) is not int or not 0 <= self.exit_code <= 0xFFFFFFFF)):
+            raise ValueError("exit code must be observed unsigned DWORD or None")
+        if type(self.stdout) is not CaptureSnapshot or type(self.stderr) is not CaptureSnapshot:
+            raise TypeError("immutable capture snapshots required")
+        if (type(self.duration_seconds) is not float or not isfinite(self.duration_seconds)
+                or self.duration_seconds < 0 or type(self.descendants_terminated) is not bool):
+            raise ValueError("invalid runtime execution evidence")
+
+    @property
+    def acceptable(self) -> bool:
+        return (self.exit_code == 0 and self.stdout.complete and self.stderr.complete
+                and not self.descendants_terminated and self.reason_code is None)
+
+
+@dataclass(slots=True)
+class StreamResources:
+    name: str
+    reader: OwnedResource
+    event: OwnedResource
+    memory: OwnedResource
+    operation: PendingOperation | None = None
+    capture: CaptureAccumulator = field(default_factory=CaptureAccumulator)
+    eof: bool = False
+    stopped: bool = False
+    cancel_sent: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class StdioResources:
+    children: tuple[OwnedResource, OwnedResource, OwnedResource]
+
+
+class BackendResourceScope:
+    """Publish opaque storage BEFORE its native acquisition attempt.
+
+    Compound primitives publish every subresource here; partial setup remains
+    visible even if the primitive does not return. No release callback or raw
+    handle lives in the runtime. The ledger remains the sole ownership model.
+    """
+    def __init__(self, invocation: TerminalInvocation, *, checkpoint: Callable[[], None]):
+        self.invocation = invocation
+        self.checkpoint = checkpoint
+        self.ordered: list[OwnedResource] = []
+        self.creation_only: list[OwnedResource] = []
+        self.streams: list[StreamResources] = []
+
+    def own(self, name: str, payload: object, *, creation_only=False) -> OwnedResource:
+        self.checkpoint()
+        resource = self.invocation.resources.reserve(name)
+        self.ordered.append(resource)
+        self.invocation.resources.adopt(resource, payload)
+        if creation_only:
+            self.creation_only.append(resource)
+        return resource
+
+
+class TerminalBackend(Protocol):
+    """Narrow borrowed-resource primitives; no admission or lifecycle policy."""
+    def open_executable(self, scope: BackendResourceScope, path: str) -> OwnedResource: ...
+    def open_cwd(self, scope: BackendResourceScope, path: str) -> OwnedResource: ...
+    def file_evidence(self, resource: object) -> FileEvidence: ...
+    def read_executable(self, resource: object, size: int) -> bytes: ...
+    def create_job(self, scope: BackendResourceScope) -> OwnedResource: ...
+    def configure_job(self, job: object) -> None: ...
+    def make_stdio(self, scope: BackendResourceScope) -> StdioResources: ...
+    def connect_pipe(self, memory: object) -> ReadResult: ...
+    def prepare_launch(self, scope: BackendResourceScope, target: TerminalExecutionTarget,
+                       command_line: str, environment: str, job: object,
+                       children: tuple[object, object, object]) -> OwnedResource: ...
+    def create_process(self, receipt: CreationReceipt, launch: object) -> None: ...
+    def membership(self, process: object, job: object) -> bool: ...
+    def resume(self, thread: object) -> int: ...
+    def submit_read(self, memory: object) -> ReadResult: ...
+    def inspect_read(self, memory: object) -> ReadResult: ...
+    def cancel_read(self, memory: object) -> None: ...
+    def root_exited(self, process: object) -> bool: ...
+    def exit_code(self, process: object) -> int: ...
+    def job_active(self, job: object) -> int: ...
+    def terminate_job(self, job: object) -> None: ...
+    def wait(self, process: object | None, memories: tuple[object, ...], seconds: float) -> None: ...
+    def release(self, resource: object) -> bool: ...
+
+
+def _same_local_final_path(final: str, approved: str) -> bool:
+    """Drive-letter normalization only; every other character stays exact."""
+    return final[0].upper() + final[1:] == approved[0].upper() + approved[1:]
+
+
+class _RuntimeStop(Exception):
+    pass
+
+
+class WindowsTerminalRuntime:
+    """Explicitly injected, unregistered, single non-main owner runtime.
+
+    Admission is not authorization. Only a future separately reviewed wiring
+    may connect this adapter to the ActionWorker's designated Thread object.
+    """
+    def __init__(self, *, backend: TerminalBackend, admission_domain: LaunchAdmissionDomain,
+                 owner_thread: Thread):
+        if backend is None or type(admission_domain) is not LaunchAdmissionDomain:
+            raise TypeError("explicit backend and shared admission domain required")
+        if not isinstance(owner_thread, Thread) or owner_thread is main_thread():
+            raise ValueError("owner must be an explicitly designated non-main thread")
+        self._backend = backend
+        self._domain = admission_domain
+        self._owner = owner_thread
+
+    def cancel_active(self) -> bool:
+        return self._domain.cancel_active()
+
+    def shutdown(self) -> AdmissionSnapshot:
+        return self._domain.shutdown()
+
+    def signal_wake(self) -> None:
+        with self._domain._condition:
+            self._domain._condition.notify_all()
+
+    def _now(self) -> float:
+        with self._domain._condition:
+            return self._domain._now_unlocked()
+
+    def _checkpoint(self, invocation):
+        snap = invocation.snapshot()
+        if snap.phase is InvocationPhase.CLEANING:
+            raise _RuntimeStop()
+        if snap.cancellation_reason is not None:
+            invocation.begin_cleanup(CleanupReason.CANCELLED)
+            raise _RuntimeStop()
+        if self._now() >= snap.execution_deadline:
+            invocation.begin_cleanup(CleanupReason.EXECUTION_TIMEOUT)
+            raise _RuntimeStop()
+
+    def _call(self, invocation, method, *resources, extra=()):
+        leases = []
+        try:
+            for resource in resources:
+                leases.append(invocation.resources.borrow(resource))
+            return method(*(lease.payload for lease in leases), *extra)
+        finally:
+            for lease in reversed(leases):
+                lease.close()
+
+    def _release(self, invocation, resource):
+        state = resource.snapshot()
+        if state.state is OwnershipState.RESERVED or state.state is OwnershipState.RELEASED:
+            return True
+        if state.release_attempted or state.pending_operations or state.borrowers:
+            return False
+        payload = invocation.resources.begin_release(resource)
+        try:
+            released = self._backend.release(payload)
+        except BaseException:
+            invocation.resources.mark_release_uncertain(resource)
+            return False
+        if released is True:
+            invocation.resources.confirm_released(resource)
+            return True
+        invocation.resources.mark_still_owned(resource)
+        return False
+
+    def _io(self, invocation, stream, *, connect=False, submit=False):
+        if stream.operation is None:
+            stream.operation = invocation.resources.begin_operation(
+                stream.reader, stream.event, stream.memory)
+        elif submit:
+            stream.operation.rearm_for_drain()
+        method = (self._backend.connect_pipe if connect else
+                  self._backend.submit_read if submit else self._backend.inspect_read)
+        result = self._call(invocation, method, stream.memory)
+        if type(result) is not ReadResult:
+            raise TerminalLifecycleError("backend did not supply read evidence")
+        if result.completed:
+            stream.operation.confirm_completed()
+            if not connect:
+                stream.capture.accept(result)
+                stream.eof = result.eof
+                stream.stopped = result.eof or result.error is not None
+            if result.error is not None:
+                raise TerminalLifecycleError("native I/O failed")
+        return result
+
+    def execute(self, target: TerminalExecutionTarget) -> TerminalRuntimeOutcome:
+        # Thread OBJECT identity also prevents recycled thread IDs admitting work.
+        if current_thread() is not self._owner or current_thread() is main_thread():
+            raise TerminalLifecycleError("terminal execution requires its non-main owner thread")
+        invocation = self._domain.admit()
+        started = invocation.snapshot().execution_deadline - TERMINAL_TIMEOUT_SECONDS
+        scope = BackendResourceScope(invocation, checkpoint=lambda: self._checkpoint(invocation))
+        job = None
+        stage = "target_validation"
+        reason = None
+        verified = None
+        environment_identity = None
+        exit_code = None
+        descendants = False
+        try:
+            if type(target) is not TerminalExecutionTarget:
+                raise TerminalContractError("exact terminal target required")
+            target.validate()
+            environment_identity = target.environment_identity
+            command = serialize_windows_command_line(target.executable_resolved, target.argv)
+            environment = build_windows_environment_block(target.environment_mapping())
+            self._checkpoint(invocation)
+            stage = "executable_verification"
+            executable = self._backend.open_executable(scope, target.executable_resolved)
+            initial = self._call(invocation, self._backend.file_evidence, executable)
+            _validate_local_path_form(initial.final_path, canonical=True)
+            if (not _same_local_final_path(initial.final_path, target.executable_resolved) or not initial.disk
+                    or initial.directory or not 0 < initial.size <= TERMINAL_EXECUTABLE_BYTES_LIMIT):
+                raise TerminalContractError("executable object differs from approved target")
+            digest = sha256()
+            header = bytearray()
+            total = 0
+            while True:
+                self._checkpoint(invocation)
+                chunk = self._call(invocation, self._backend.read_executable, executable,
+                                   extra=(TERMINAL_PE_HEADER_BYTES,))
+                if type(chunk) is not bytes or len(chunk) > TERMINAL_PE_HEADER_BYTES:
+                    raise TerminalContractError("invalid bounded executable read")
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > initial.size:
+                    raise TerminalContractError("executable changed during verification")
+                header.extend(chunk[:max(0, TERMINAL_PE_HEADER_BYTES - len(header))])
+                digest.update(chunk)
+            inspect_windows_console_pe(bytes(header), file_size=total)
+            final = self._call(invocation, self._backend.file_evidence, executable)
+            identity = "sha256:" + digest.hexdigest()
+            if total != initial.size or initial != final or identity != target.executable_identity:
+                raise TerminalContractError("executable identity mismatch")
+            verified = identity
+            self._checkpoint(invocation)
+            stage = "cwd_verification"
+            cwd = self._backend.open_cwd(scope, target.cwd)
+            cwd_info = self._call(invocation, self._backend.file_evidence, cwd)
+            _validate_local_path_form(cwd_info.final_path, canonical=True)
+            if (not _same_local_final_path(cwd_info.final_path, target.cwd)
+                    or not cwd_info.disk or not cwd_info.directory):
+                raise TerminalContractError("cwd object differs from approved target")
+            self._checkpoint(invocation)
+            stage = "job_setup"
+            job = self._backend.create_job(scope)
+            self._call(invocation, self._backend.configure_job, job)
+            self._checkpoint(invocation)
+            stage = "stdio_setup"
+            stdio = self._backend.make_stdio(scope)
+            for stream in scope.streams:
+                self._checkpoint(invocation)
+                connected = self._io(invocation, stream, connect=True)
+                if not connected.completed:
+                    raise TerminalLifecycleError("unexpected pending pipe connection")
+                self._io(invocation, stream, submit=True)
+            self._checkpoint(invocation)
+            stage = "launch_marshaling"
+            leases = [invocation.resources.borrow(r) for r in (job, *stdio.children)]
+            try:
+                launch = self._backend.prepare_launch(
+                    scope, target, command, environment, leases[0].payload,
+                    tuple(lease.payload for lease in leases[1:]))
+            finally:
+                for lease in reversed(leases):
+                    lease.close()
+            self._checkpoint(invocation)
+            stage = "create_process"
+            if not invocation.commit_creation():
+                raise _RuntimeStop()
+            self._create(invocation, launch)
+            receipt = invocation.creation.snapshot()
+            if receipt.result_pending:
+                invocation.begin_cleanup(CleanupReason.CREATION_UNCERTAIN)
+                reason = "creation_uncertain"
+                raise _RuntimeStop()
+            if not receipt.process_created:
+                if receipt.call_count:
+                    invocation.begin_cleanup(CleanupReason.CREATE_CALL_FAILED)
+                    reason = "native_creation_failed"
+                raise _RuntimeStop()
+            if not invocation.adopt_created():
+                raise _RuntimeStop()
+            stage = "post_create_setup"
+            for resource in scope.creation_only:
+                if not self._release(invocation, resource):
+                    raise TerminalLifecycleError("creation-only resource release failed")
+            process = invocation.resources.resource("root-process")
+            thread = invocation.resources.resource("primary-thread")
+            if not self._call(invocation, self._backend.membership, process, job):
+                raise TerminalLifecycleError("creation-time Job membership not confirmed")
+            self._checkpoint(invocation)
+            if any(s.operation is None or s.stopped for s in scope.streams):
+                raise TerminalLifecycleError("capture is not ready")
+            stage = "resume"
+            if not invocation.commit_resume():
+                raise _RuntimeStop()
+            if self._call(invocation, self._backend.resume, thread) != 1:
+                raise TerminalLifecycleError("unexpected prior suspend count")
+            invocation.record_resumed()
+            stage = "execution"
+            while invocation.snapshot().phase is InvocationPhase.RUNNING:
+                self._checkpoint(invocation)
+                for stream in scope.streams:
+                    if not stream.stopped:
+                        if stream.operation.completed:
+                            self._io(invocation, stream, submit=True)
+                        else:
+                            self._io(invocation, stream)
+                if self._call(invocation, self._backend.root_exited, process):
+                    invocation.confirm_process_exited()
+                    exit_code = self._call(invocation, self._backend.exit_code, process)
+                    break
+                self._wait(invocation, scope, process, invocation.snapshot().execution_deadline)
+        except _RuntimeStop:
+            pass
+        except BaseException:
+            receipt = invocation.creation.snapshot()
+            trigger = (CleanupReason.CREATION_UNCERTAIN if receipt.result_pending else
+                       CleanupReason.POST_CREATE_FAILURE if receipt.process_created else
+                       CleanupReason.CREATE_CALL_FAILED if receipt.call_count else
+                       CleanupReason.PREFLIGHT_FAILURE)
+            invocation.begin_cleanup(trigger)
+            reason = "creation_uncertain" if receipt.result_pending else "runtime_failure"
+        receipt = invocation.creation.snapshot()
+        if invocation.snapshot().phase is not InvocationPhase.CLEANING:
+            trigger = (CleanupReason.CREATION_UNCERTAIN if receipt.result_pending else
+                       CleanupReason.POST_CREATE_FAILURE if receipt.process_created else
+                       CleanupReason.CREATE_CALL_FAILED if receipt.call_count else
+                       CleanupReason.PREFLIGHT_FAILURE)
+            invocation.begin_cleanup(trigger)
+        try:
+            descendants, exit_code = self._cleanup(invocation, scope, job, exit_code)
+        except BaseException:
+            invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            invocation.quarantine(QuarantineReason.INCOMPLETE_CLEANUP)
+        captures = {stream.name: stream.capture.finalize(
+            pending=stream.operation is not None and not stream.operation.completed)
+                    for stream in scope.streams}
+        missing = CaptureAccumulator().finalize()
+        trigger = invocation.snapshot().cleanup_reason
+        if reason is None and trigger is CleanupReason.ROOT_EXIT:
+            if not invocation.cleanup_evidence().cleanup_completed:
+                reason = "cleanup_incomplete"
+            elif descendants:
+                reason = "descendants_outlived_root"
+            elif exit_code != 0:
+                reason = "exit_nonzero"
+            elif not all(c.complete for c in captures.values()) or len(captures) != 2:
+                reason = "capture_incomplete"
+            elif invocation.outcome().cleanup_issues:
+                reason = "cleanup_failure"
+        if reason is None and trigger is not CleanupReason.ROOT_EXIT:
+            reason = trigger.value
+        execution = TerminalExecutionEvidence(
+            exit_code, captures.get("stdout", missing), captures.get("stderr", missing),
+            verified, environment_identity, max(0.0, self._now() - started),
+            ("cleanup" if reason in {"cleanup_incomplete", "cleanup_failure",
+                                     "capture_incomplete", "descendants_outlived_root"}
+             else stage if reason is not None else None), reason, descendants)
+        outcome = invocation.outcome()
+        return TerminalRuntimeOutcome(outcome.cleanup, outcome.process_resumed,
+                                      outcome.terminal_trigger, outcome.cleanup_issues, execution)
+
+    def _create(self, invocation, launch):
+        with invocation.resources.borrow(launch) as lease:
+            self._backend.create_process(invocation.creation, lease.payload)
+
+    def _wait(self, invocation, scope, process, deadline):
+        resources = ([] if process is None else [process]) + [
+            s.memory for s in scope.streams if s.operation is not None and not s.operation.completed]
+        leases = []
+        try:
+            for r in resources:
+                leases.append(invocation.resources.borrow(r))
+            root = None if process is None else leases[0].payload
+            memories = tuple(l.payload for l in leases[(0 if process is None else 1):])
+            self._backend.wait(root, memories, min(0.02, max(0.0, deadline - self._now())))
+        finally:
+            for lease in reversed(leases):
+                lease.close()
+
+    def _cleanup(self, invocation, scope, job, exit_code):
+        snap = invocation.snapshot()
+        receipt = snap.creation
+        process = (invocation.resources.resource("root-process")
+                   if receipt.process_created and receipt.process_attached else None)
+        descendants = False
+        containment = False
+        termination_requested = False
+        membership_failed = False
+        if (process is not None and job is not None
+                and snap.cleanup_reason is CleanupReason.ROOT_EXIT):
+            try:
+                membership_failed = not self._call(invocation, self._backend.membership, process, job)
+            except BaseException:
+                membership_failed = True
+            if membership_failed:
+                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+        if job is not None and (receipt.process_created or receipt.result_pending):
+            active = None
+            try:
+                active = self._call(invocation, self._backend.job_active, job)
+                if active == 0:
+                    invocation.confirm_job_empty()
+            except BaseException:
+                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            descendants = (snap.cleanup_reason is CleanupReason.ROOT_EXIT
+                           and active is not None and active > 0)
+            if descendants:
+                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            if (receipt.result_pending or snap.cleanup_reason is not CleanupReason.ROOT_EXIT
+                    or active != 0 or membership_failed):
+                try:
+                    self._call(invocation, self._backend.terminate_job, job)
+                    termination_requested = True
+                except BaseException:
+                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+        # Known parent writers must close to make EOF observable, including P0/C1.
+        for resource in scope.creation_only:
+            if receipt.result_pending and resource.snapshot().name in {"launch", "attributes"}:
+                continue
+            self._release(invocation, resource)
+        deadline = snap.cleanup_deadline
+        cancel_at = self._now() + max(0.0, (deadline - self._now()) / 2)
+        while self._now() < deadline:
+            if process is not None and not invocation.snapshot().process_exited:
+                try:
+                    if self._call(invocation, self._backend.root_exited, process):
+                        invocation.confirm_process_exited()
+                        exit_code = self._call(invocation, self._backend.exit_code, process)
+                except BaseException:
+                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            if job is not None and (receipt.process_created or receipt.result_pending):
+                try:
+                    if self._call(invocation, self._backend.job_active, job) == 0:
+                        invocation.confirm_job_empty()
+                        containment = True
+                        if invocation.snapshot().process_exited:
+                            invocation.confirm_containment_empty()
+                except BaseException:
+                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            for stream in scope.streams:
+                if stream.operation is None or stream.stopped:
+                    continue
+                try:
+                    if self._now() >= cancel_at:
+                        if not stream.operation.completed and not stream.cancel_sent:
+                            stream.operation.request_cancel()
+                            stream.cancel_sent = True
+                            self._call(invocation, self._backend.cancel_read, stream.memory)
+                        if stream.operation.completed:
+                            stream.stopped = True
+                            continue
+                    if stream.operation.completed:
+                        self._io(invocation, stream, submit=True)
+                    else:
+                        self._io(invocation, stream)
+                except BaseException:
+                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+                    if stream.operation.completed:
+                        stream.stopped = True
+            settled = all(s.operation is None or s.operation.completed and s.stopped
+                          for s in scope.streams)
+            if settled and (not receipt.process_created and not receipt.result_pending
+                            or containment and (receipt.result_pending or invocation.snapshot().process_exited)):
+                break
+            try:
+                self._wait(invocation, scope,
+                           process if process is not None and not invocation.snapshot().process_exited else None,
+                           deadline)
+            except BaseException:
+                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+                break
+        # Last opportunity to request cancellation, never evidence of completion.
+        for stream in scope.streams:
+            if stream.operation is not None and not stream.operation.completed and not stream.cancel_sent:
+                stream.operation.request_cancel()
+                stream.cancel_sent = True
+                try:
+                    self._call(invocation, self._backend.cancel_read, stream.memory)
+                except BaseException:
+                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+        # Job is LAST. Pending dependencies and uncertain creation storage stay owned.
+        for resource in reversed(scope.ordered):
+            if resource is job or resource.snapshot().name in {"executable", "cwd"}:
+                continue
+            if receipt.result_pending and resource.snapshot().name in {"launch", "attributes"}:
+                continue
+            if receipt.process_created and not receipt.adoption_complete and resource.snapshot().name == "launch":
+                continue
+            self._release(invocation, resource)
+        if receipt.process_created and receipt.adoption_complete and invocation.snapshot().containment_empty:
+            self._release(invocation, invocation.resources.resource("primary-thread"))
+            self._release(invocation, invocation.resources.resource("root-process"))
+        for resource in reversed(scope.ordered):
+            if resource.snapshot().name in {"cwd", "executable"}:
+                self._release(invocation, resource)
+        if job is not None and not receipt.result_pending and (
+                not receipt.process_created or invocation.snapshot().containment_empty):
+            self._release(invocation, job)
+        try:
+            invocation.finish_cleanup()
+        except TerminalLifecycleError:
+            invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN if receipt.result_pending
+                                  else QuarantineReason.INCOMPLETE_CLEANUP)
+        return (descendants and termination_requested and invocation.snapshot().containment_empty), exit_code

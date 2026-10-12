@@ -1,0 +1,16 @@
+{
+  "phase": "D1G-D2B-R2A",
+  "status": "FAILED_REPORT_FINALIZATION",
+  "runner_exit_code": 1,
+  "pytest_exit_code": null,
+  "reason": "Optional pytest JUnit XML reporter calls platform.node -> uname -> win32_ver -> _syscmd_ver -> subprocess.Popen; R2 audit guard rejected this during session finish.",
+  "observed_blocked_event": "subprocess.Popen",
+  "complete_guard_report_available": false,
+  "no_live_terminal_child": true,
+  "ordinary_xml_attempt": {
+    "exit_code": 0,
+    "passed": 1633,
+    "process_event_counts": null,
+    "note": "XML reporter was unguarded and reached the helper-capable platform.node path; this attempt is excluded from clean non-spawning validation."
+  }
+}

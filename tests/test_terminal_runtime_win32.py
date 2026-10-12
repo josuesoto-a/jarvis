@@ -211,9 +211,13 @@ def test_native_object_verification_fails_closed(change):
 def test_root_exit_with_descendants_terminates_and_fails_even_exit_zero():
     backend = FakeRuntimeBackend(FakeClock())
     backend.descendants = True
+    from capabilities.terminal_runtime import JobPidSnapshot
+    backend.pid_snapshot = JobPidSnapshot((backend.root_pid, backend.root_pid + 1))
     outcome, _, _ = run_fake(backend)
     assert outcome.terminal_trigger is CleanupReason.ROOT_EXIT
-    assert outcome.execution.exit_code == 0 and outcome.execution.descendants_terminated
+    assert outcome.execution.exit_code == 0 and outcome.execution.non_root_job_member_observed
+    assert outcome.execution.job_termination_requested and not outcome.execution.descendants_terminated
+    assert outcome.execution.reason_code == "non_root_job_member_after_root_exit"
     assert "terminate_job" in names(backend)
     assert outcome.cleanup_completed and outcome.disposition is RuntimeDisposition.FAILED
 

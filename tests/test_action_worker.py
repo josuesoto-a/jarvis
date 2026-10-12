@@ -4,7 +4,6 @@ import builtins
 import inspect
 import json
 import socket
-import subprocess
 import sys
 import webbrowser
 from queue import Full, Queue
@@ -579,30 +578,33 @@ def test_shutdown_timeout_requires_explicit_wait(harness):
     assert worker.result(request_id, timeout=LIMIT)["status"] == "completed"
 
 
-def test_worker_has_only_transport_and_contract_domain_imports():
+def test_worker_has_only_transport_and_contract_domain_imports(monkeypatch):
     tree = ast.parse(inspect.getsource(worker_module))
     imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert {name for name in imports if name.startswith("core.")} == {
         "core.approval", "core.contracts", "core.transport",
         "core.orchestrator",
     }
-    # Verify TYPE_CHECKING causes no runtime import of orchestration dependencies.
-    script = """
-import builtins
-original = builtins.__import__
-def checked(name, *args, **kwargs):
-    if name in {'core.orchestrator', 'core.planner', 'core.executor', 'core.permissions'}:
-        raise AssertionError(name)
-    if name.split('.')[0] in {'openai', 'capabilities'}:
-        raise AssertionError(name)
-    return original(name, *args, **kwargs)
-builtins.__import__ = checked
-import core.action_worker
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, timeout=LIMIT,
-    )
-    assert result.returncode == 0, result.stderr
+    # Execute a fresh module namespace with a checked import hook: no helper child.
+    import builtins
+    from types import ModuleType
+
+    original = builtins.__import__
+
+    def checked(name, *args, **kwargs):
+        if name in {"core.orchestrator", "core.planner", "core.executor", "core.permissions"}:
+            raise AssertionError(name)
+        if name.split(".")[0] in {"openai", "capabilities"}:
+            raise AssertionError(name)
+        return original(name, *args, **kwargs)
+
+    probe = ModuleType("core._worker_import_probe")
+    probe.__package__ = "core"
+    probe.__file__ = worker_module.__file__
+    monkeypatch.setitem(sys.modules, probe.__name__, probe)
+    monkeypatch.setattr(builtins, "__import__", checked)
+    exec(compile(inspect.getsource(worker_module), probe.__file__, "exec"), probe.__dict__)
+    assert probe.ActionWorker.__module__ == probe.__name__
 
 
 @pytest.mark.parametrize("expected", ["completed", "failed", "blocked", "waiting_for_permission"])

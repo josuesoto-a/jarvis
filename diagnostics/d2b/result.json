@@ -1,0 +1,1302 @@
+{
+  "phase": "D1G-D2B",
+  "status": "STOP",
+  "scope": "isolated diagnostic interpreter only; external command runner and ordinary tests excluded",
+  "base": {
+    "branch": "main",
+    "head": "722e4d0513d56f40853187e576c682ac9ca33691",
+    "origin_main": "722e4d0513d56f40853187e576c682ac9ca33691"
+  },
+  "diagnostic_pid": 19968,
+  "start_utc_epoch": 1791811321.9331772,
+  "d2a_evidence_sha256": "66f99ccbc72e5f76bd3f4ede29a1f7c09ca7bdd28f72bb002b61840fc4ffd00e",
+  "target": {
+    "contract_version": "terminal-execution-target/v2",
+    "platform_contract": "windows10-11-x64-console/v1",
+    "executable_requested": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "executable_resolved": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "executable_identity": "sha256:5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+    "argv": [
+      "-I",
+      "-S",
+      "-c",
+      "import sys; sys.stdout.write(\"D2b stdout\\n\"); sys.stderr.write(\"D2b stderr\\n\")"
+    ],
+    "cwd": "C:\\Users\\josue\\jarvis",
+    "environment_policy_id": "windows-minimal/v2",
+    "environment": [
+      [
+        "SYSTEMROOT",
+        "C:\\WINDOWS"
+      ],
+      [
+        "WINDIR",
+        "C:\\WINDOWS"
+      ],
+      [
+        "TEMP",
+        "C:\\Users\\josue\\AppData\\Local\\Temp"
+      ],
+      [
+        "TMP",
+        "C:\\Users\\josue\\AppData\\Local\\Temp"
+      ],
+      [
+        "USERPROFILE",
+        "C:\\Users\\josue"
+      ],
+      [
+        "PATH",
+        "C:\\Users\\josue\\.codex\\tmp\\arg0\\codex-arg0WC1p0m;C:\\Users\\josue\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\codex-path;C;C:\\Users\\josue\\jarvis\\.venv\\Scripts;C:\\Users\\josue\\bin;C:\\Program Files\\Git\\mingw64\\bin;C:\\Program Files\\Git\\usr\\local\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\mingw64\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Users\\josue\\bin;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0;C:\\WINDOWS\\System32\\OpenSSH;C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR;C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common;C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs;C:\\Users\\josue\\AppData\\Local\\Microsoft\\WindowsApps;D:\\Microsoft VS Code\\bin;C:\\Users\\josue\\AppData\\Roaming\\npm;E:\\google cloud\\google-cloud-sdk\\bin;C:\\Program Files\\PostgreSQL\\18\\bin;C:\\Program Files\\Git\\usr\\bin\\vendor_perl;C:\\Program Files\\Git\\usr\\bin\\core_perl"
+      ],
+      [
+        "PATHEXT",
+        ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL"
+      ]
+    ],
+    "environment_identity": "sha256:2c8fcf0ad4fe5573db3f1b70bd5734b10c5ad486437bd1e64c6a28726e2bb313",
+    "timeout_seconds": 30.0,
+    "stdin_mode": "devnull",
+    "shell": false,
+    "runtime_policy": {
+      "policy_id": "windows-bounded-runtime-contract/v1",
+      "executable_policy": "canonical-local-drive-native-console-pe/v1",
+      "supported_machines": [
+        332,
+        34404
+      ],
+      "identity_verification_policy": "held-restrictive-read-sha256/v1",
+      "serialization_policy": "windows-crt-argv/v1",
+      "command_line_utf16_limit": 30000,
+      "argv_limit": 1024,
+      "path_utf16_limit": 259,
+      "pe_header_bytes": 65536,
+      "executable_bytes_limit": 268435456,
+      "environment_transport_policy": "unicode-sorted-exact/v1",
+      "environment_utf16_limit": 32768,
+      "output_policy": "windows-prefix-64k/v1",
+      "stdout_bytes_limit": 65536,
+      "stderr_bytes_limit": 65536,
+      "read_chunk_bytes": 16384,
+      "decoding_policy": "utf8-replace/v1",
+      "cleanup_seconds": 5.0,
+      "containment_policy": "creation-time-job-kill-on-close-no-breakaway/v1",
+      "descendant_exit_policy": "terminate-and-fail-if-root-exits-first/v1",
+      "inherited_handles": [
+        "stdin-nul",
+        "stdout-writer",
+        "stderr-writer"
+      ],
+      "creation_flags": [
+        "CREATE_SUSPENDED",
+        "EXTENDED_STARTUPINFO_PRESENT",
+        "CREATE_UNICODE_ENVIRONMENT",
+        "CREATE_NO_WINDOW"
+      ],
+      "active_invocations_limit": 1,
+      "parent_io_policy": "fixed-owned-handles-two-bounded-pending-reads/v1",
+      "job_resource_policy": "unresolved-no-activation/v1",
+      "result_policy": "structured-failure-created-evidence/v1",
+      "deadline_policy": "runtime-entry-preflight-included-single-cleanup-budget/v1"
+    }
+  },
+  "command_line": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -I -S -c \"import sys; sys.stdout.write(\\\"D2b stdout\\n\\\"); sys.stderr.write(\\\"D2b stderr\\n\\\")\"",
+  "expected_stdout": "D2b stdout\n",
+  "expected_stderr": "D2b stderr\n",
+  "newline_normalization": "none; exact utf8-replace/v1 captured content",
+  "creation_counts": {
+    "wrapper_attempts": 1,
+    "native_dispatches": 1,
+    "known_successes": 1,
+    "known_failures": 0,
+    "uncertain_outcomes": 0
+  },
+  "resume_counts": {
+    "native_dispatches": 1,
+    "result": 1
+  },
+  "production_terminal": "OFF",
+  "d3_performed": false,
+  "d4_performed": false,
+  "host": {
+    "windows": [
+      10,
+      0,
+      19045,
+      2,
+      ""
+    ],
+    "product_type": 1,
+    "process_machine": 0,
+    "native_machine": 34404,
+    "pointer_bytes": 8,
+    "wchar_bytes": 2,
+    "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "host_validator": "D2a diagnostic-local direct-native adapter; identical host policy"
+  },
+  "file_verification": [
+    {
+      "final_path": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "size": 103192,
+      "directory": false,
+      "disk": true,
+      "stamp": [
+        1627117867,
+        3342336,
+        181195,
+        31098157,
+        2719126528
+      ]
+    },
+    {
+      "final_path": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "size": 103192,
+      "directory": false,
+      "disk": true,
+      "stamp": [
+        1627117867,
+        3342336,
+        181195,
+        31098157,
+        2719126528
+      ]
+    },
+    {
+      "final_path": "C:\\Users\\josue\\jarvis",
+      "size": 8192,
+      "directory": true,
+      "disk": true,
+      "stamp": [
+        1627117867,
+        3997696,
+        20507,
+        31283247,
+        3207943823
+      ]
+    },
+    {
+      "final_path": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "size": 103192,
+      "directory": false,
+      "disk": true,
+      "stamp": [
+        1627117867,
+        3342336,
+        181195,
+        31098157,
+        2719126528
+      ]
+    },
+    {
+      "final_path": "C:\\Users\\josue\\jarvis",
+      "size": 8192,
+      "directory": true,
+      "disk": true,
+      "stamp": [
+        1627117867,
+        3997696,
+        20507,
+        31283247,
+        3207943823
+      ]
+    }
+  ],
+  "job": {
+    "unnamed": true,
+    "limit_flags": 8192,
+    "initial_active": 0,
+    "at_creation_attribute": "PROC_THREAD_ATTRIBUTE_JOB_LIST"
+  },
+  "marshaling": {
+    "explicit_application": true,
+    "mutable_command": true,
+    "exact_frozen_environment_block": true,
+    "environment_implicit_inheritance": false,
+    "exact_cwd": true,
+    "process_thread_security_null": true,
+    "creation_flags_unchanged": true
+  },
+  "attributes": {
+    "count": 2,
+    "handle_list_count": 3,
+    "job_list_count": 1,
+    "arrays_retained": true,
+    "flags": 134743044,
+    "startup_cb": 112
+  },
+  "inheritance": {
+    "exact_set": [
+      "stdin-nul",
+      "stdout-writer",
+      "stderr-writer"
+    ],
+    "inheritable_handles": 3,
+    "other_owned_handles_noninheritable": true
+  },
+  "executable": {
+    "final_path": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "sha256": "5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+    "machine": 34404,
+    "subsystem": 3,
+    "size": 103192,
+    "same_restrictive_handle_held": true
+  },
+  "cwd": {
+    "final_path": "C:\\Users\\josue\\jarvis",
+    "size": 8192,
+    "directory": true,
+    "disk": true,
+    "stamp": [
+      1627117867,
+      3997696,
+      20507,
+      31283247,
+      3207943823
+    ]
+  },
+  "p1_commit": {
+    "no_payload_first_commit": true,
+    "before_output_inspection": true,
+    "before_adoption": true,
+    "before_membership": true,
+    "before_resume": true
+  },
+  "child_pid": 33204,
+  "creation_receipt_after_backend": {
+    "call_count": 1,
+    "classification": "P1",
+    "process_created": true,
+    "result_pending": false,
+    "process_attached": true,
+    "thread_attached": true
+  },
+  "membership_observations": [
+    true,
+    true
+  ],
+  "root_exit_observed": true,
+  "job_active_observations": [
+    1,
+    0
+  ],
+  "outcome": {
+    "cleanup": {
+      "phase": "finished",
+      "creation": {
+        "call_count": 1,
+        "classification": "P1",
+        "process_created": true,
+        "result_pending": false,
+        "process_attached": true,
+        "thread_attached": true
+      },
+      "resources": [
+        {
+          "name": "root-process",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907551D0>",
+            "generation": 1,
+            "kind": "root-process"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "primary-thread",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907551C0>",
+            "generation": 2,
+            "kind": "primary-thread"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "executable",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907551E0>",
+            "generation": 3,
+            "kind": "executable"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "cwd",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907551F0>",
+            "generation": 4,
+            "kind": "cwd"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "job",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755200>",
+            "generation": 5,
+            "kind": "job"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "thread-token-check",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755210>",
+            "generation": 6,
+            "kind": "thread-token-check"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "process-token",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755220>",
+            "generation": 7,
+            "kind": "process-token"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "logon-sid-string",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755230>",
+            "generation": 8,
+            "kind": "logon-sid-string"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "pipe-security",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755240>",
+            "generation": 9,
+            "kind": "pipe-security"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stdin-original",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755250>",
+            "generation": 10,
+            "kind": "stdin-original"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stdin-child",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755260>",
+            "generation": 11,
+            "kind": "stdin-child"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stdout-reader",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755270>",
+            "generation": 12,
+            "kind": "stdout-reader"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stdout-original",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755280>",
+            "generation": 13,
+            "kind": "stdout-original"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stdout-child",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755290>",
+            "generation": 14,
+            "kind": "stdout-child"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stdout-event",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907552A0>",
+            "generation": 15,
+            "kind": "stdout-event"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stdout-memory",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907552B0>",
+            "generation": 16,
+            "kind": "stdout-memory"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stderr-reader",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907552C0>",
+            "generation": 17,
+            "kind": "stderr-reader"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stderr-original",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907552D0>",
+            "generation": 18,
+            "kind": "stderr-original"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stderr-child",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907552E0>",
+            "generation": 19,
+            "kind": "stderr-child"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stderr-event",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x00000201907552F0>",
+            "generation": 20,
+            "kind": "stderr-event"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "stderr-memory",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755300>",
+            "generation": 21,
+            "kind": "stderr-memory"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "launch",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755310>",
+            "generation": 22,
+            "kind": "launch"
+          },
+          "release_attempted": true
+        },
+        {
+          "name": "attributes",
+          "state": "released",
+          "borrowers": 0,
+          "pending_operations": 0,
+          "identity": {
+            "domain": "<object object at 0x0000020190755320>",
+            "generation": 23,
+            "kind": "attributes"
+          },
+          "release_attempted": true
+        }
+      ],
+      "pending_operations": 0,
+      "process_exited": true,
+      "containment_empty": true,
+      "quarantine_transferred": false,
+      "job_empty": true
+    },
+    "process_resumed": true,
+    "terminal_trigger": "root_exit",
+    "cleanup_issues": [
+      "failure"
+    ],
+    "execution": {
+      "exit_code": 0,
+      "stdout": {
+        "text": "D2b stdout\r\n",
+        "observed": 12,
+        "retained": 12,
+        "truncated": false,
+        "eof": true,
+        "complete": true,
+        "saturated": false
+      },
+      "stderr": {
+        "text": "D2b stderr\r\n",
+        "observed": 12,
+        "retained": 12,
+        "truncated": false,
+        "eof": true,
+        "complete": true,
+        "saturated": false
+      },
+      "verified_executable_identity": "sha256:5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+      "environment_identity": "sha256:2c8fcf0ad4fe5573db3f1b70bd5734b10c5ad486437bd1e64c6a28726e2bb313",
+      "duration_seconds": 0.0779999999795109,
+      "failure_stage": "cleanup",
+      "reason_code": "descendants_outlived_root",
+      "descendants_terminated": true
+    }
+  },
+  "failure": "Traceback (most recent call last):\n  File \"C:\\Users\\josue\\jarvis\\scripts\\live_d1g_d2b_first_child.py\", line 366, in owner\n    require(outcome.creation_classification is R.CreationClassification.PROCESS_CREATED\n  File \"C:\\Users\\josue\\jarvis\\scripts\\d2b_contract.py\", line 12, in require\n    raise RuntimeError(message)\nRuntimeError: runtime did not complete\n",
+  "creation_classification": "P1",
+  "native_call_counts": {
+    "CreateFileW": 5,
+    "GetFileInformationByHandle": 5,
+    "GetFileType": 5,
+    "GetFinalPathNameByHandleW": 10,
+    "GetDriveTypeW": 5,
+    "ReadFile": 7,
+    "CreateJobObjectW": 1,
+    "SetInformationJobObject": 1,
+    "QueryInformationJobObject": 4,
+    "GetCurrentThread": 1,
+    "OpenThreadToken": 1,
+    "GetCurrentProcess": 4,
+    "OpenProcessToken": 1,
+    "GetTokenInformation": 2,
+    "ConvertSidToStringSidW": 1,
+    "ConvertStringSecurityDescriptorToSecurityDescriptorW": 1,
+    "DuplicateHandle": 3,
+    "CreateNamedPipeW": 2,
+    "CreateEventW": 2,
+    "GetProcessHeap": 3,
+    "HeapAlloc": 3,
+    "ResetEvent": 6,
+    "ConnectNamedPipe": 2,
+    "GetNamedPipeClientProcessId": 2,
+    "GetCurrentProcessId": 2,
+    "InitializeProcThreadAttributeList": 2,
+    "UpdateProcThreadAttribute": 2,
+    "GetHandleInformation": 14,
+    "CloseHandle": 16,
+    "DeleteProcThreadAttributeList": 1,
+    "HeapFree": 3,
+    "IsProcessInJob": 2,
+    "GetOverlappedResult": 6,
+    "WaitForSingleObject": 4,
+    "WaitForMultipleObjects": 3,
+    "GetExitCodeProcess": 1,
+    "TerminateJobObject": 1,
+    "LocalFree": 2
+  },
+  "native_acquisitions": {
+    "handles": 16,
+    "local": 2,
+    "heap": 3,
+    "attributes": 1
+  },
+  "native_releases": {
+    "handles": 16,
+    "attributes": 1,
+    "heap": 3,
+    "local": 2
+  },
+  "native_remaining": {
+    "handles": 0,
+    "heap": 0,
+    "local": 0,
+    "attributes": 0
+  },
+  "release_order": [
+    "stdin-original",
+    "stdin-child",
+    "stdout-original",
+    "stdout-child",
+    "stderr-original",
+    "stderr-child",
+    "launch",
+    "attributes",
+    "stderr-memory",
+    "stderr-event",
+    "stderr-reader",
+    "stdout-memory",
+    "stdout-event",
+    "stdout-reader",
+    "pipe-security",
+    "logon-sid-string",
+    "process-token",
+    "thread-token-check",
+    "_CreationHandle",
+    "_CreationHandle",
+    "cwd",
+    "executable",
+    "job"
+  ],
+  "ordered_events": [
+    "P1 committed",
+    "backend adoption complete",
+    "membership verified",
+    "ResumeThread returned",
+    "membership verified"
+  ],
+  "domain": {
+    "state": "open",
+    "admission_closed": false,
+    "active": false,
+    "quarantined": false,
+    "quarantine_resolved": false,
+    "closure_completed": false
+  },
+  "quarantined": false,
+  "poisoned": false,
+  "resources": [
+    {
+      "name": "root-process",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755350>",
+        "generation": 1,
+        "kind": "root-process"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "primary-thread",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755330>",
+        "generation": 2,
+        "kind": "primary-thread"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "executable",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755340>",
+        "generation": 3,
+        "kind": "executable"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "cwd",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755360>",
+        "generation": 4,
+        "kind": "cwd"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "job",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755370>",
+        "generation": 5,
+        "kind": "job"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "thread-token-check",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755380>",
+        "generation": 6,
+        "kind": "thread-token-check"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "process-token",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755390>",
+        "generation": 7,
+        "kind": "process-token"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "logon-sid-string",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x00000201907553A0>",
+        "generation": 8,
+        "kind": "logon-sid-string"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "pipe-security",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x00000201907553B0>",
+        "generation": 9,
+        "kind": "pipe-security"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stdin-original",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x00000201907553C0>",
+        "generation": 10,
+        "kind": "stdin-original"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stdin-child",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x00000201907553D0>",
+        "generation": 11,
+        "kind": "stdin-child"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stdout-reader",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x00000201907553E0>",
+        "generation": 12,
+        "kind": "stdout-reader"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stdout-original",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x00000201907553F0>",
+        "generation": 13,
+        "kind": "stdout-original"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stdout-child",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755400>",
+        "generation": 14,
+        "kind": "stdout-child"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stdout-event",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755410>",
+        "generation": 15,
+        "kind": "stdout-event"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stdout-memory",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755420>",
+        "generation": 16,
+        "kind": "stdout-memory"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stderr-reader",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755430>",
+        "generation": 17,
+        "kind": "stderr-reader"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stderr-original",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755440>",
+        "generation": 18,
+        "kind": "stderr-original"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stderr-child",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755450>",
+        "generation": 19,
+        "kind": "stderr-child"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stderr-event",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755460>",
+        "generation": 20,
+        "kind": "stderr-event"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "stderr-memory",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755470>",
+        "generation": 21,
+        "kind": "stderr-memory"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "launch",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755480>",
+        "generation": 22,
+        "kind": "launch"
+      },
+      "release_attempted": true
+    },
+    {
+      "name": "attributes",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000020190755490>",
+        "generation": 23,
+        "kind": "attributes"
+      },
+      "release_attempted": true
+    }
+  ],
+  "cleanup_evidence": {
+    "phase": "finished",
+    "creation": {
+      "call_count": 1,
+      "classification": "P1",
+      "process_created": true,
+      "result_pending": false,
+      "process_attached": true,
+      "thread_attached": true
+    },
+    "resources": [
+      {
+        "name": "root-process",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907554A0>",
+          "generation": 1,
+          "kind": "root-process"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "primary-thread",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907554B0>",
+          "generation": 2,
+          "kind": "primary-thread"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "executable",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907554C0>",
+          "generation": 3,
+          "kind": "executable"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "cwd",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907554D0>",
+          "generation": 4,
+          "kind": "cwd"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "job",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907554E0>",
+          "generation": 5,
+          "kind": "job"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "thread-token-check",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907554F0>",
+          "generation": 6,
+          "kind": "thread-token-check"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "process-token",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755500>",
+          "generation": 7,
+          "kind": "process-token"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "logon-sid-string",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755040>",
+          "generation": 8,
+          "kind": "logon-sid-string"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "pipe-security",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755030>",
+          "generation": 9,
+          "kind": "pipe-security"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stdin-original",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755150>",
+          "generation": 10,
+          "kind": "stdin-original"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stdin-child",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755140>",
+          "generation": 11,
+          "kind": "stdin-child"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stdout-reader",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755130>",
+          "generation": 12,
+          "kind": "stdout-reader"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stdout-original",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755120>",
+          "generation": 13,
+          "kind": "stdout-original"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stdout-child",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755110>",
+          "generation": 14,
+          "kind": "stdout-child"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stdout-event",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907550C0>",
+          "generation": 15,
+          "kind": "stdout-event"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stdout-memory",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907550F0>",
+          "generation": 16,
+          "kind": "stdout-memory"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stderr-reader",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907550E0>",
+          "generation": 17,
+          "kind": "stderr-reader"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stderr-original",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907550D0>",
+          "generation": 18,
+          "kind": "stderr-original"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stderr-child",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755100>",
+          "generation": 19,
+          "kind": "stderr-child"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stderr-event",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907550B0>",
+          "generation": 20,
+          "kind": "stderr-event"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "stderr-memory",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x00000201907550A0>",
+          "generation": 21,
+          "kind": "stderr-memory"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "launch",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755090>",
+          "generation": 22,
+          "kind": "launch"
+        },
+        "release_attempted": true
+      },
+      {
+        "name": "attributes",
+        "state": "released",
+        "borrowers": 0,
+        "pending_operations": 0,
+        "identity": {
+          "domain": "<object object at 0x0000020190755080>",
+          "generation": 23,
+          "kind": "attributes"
+        },
+        "release_attempted": true
+      }
+    ],
+    "pending_operations": 0,
+    "process_exited": true,
+    "containment_empty": true,
+    "quarantine_transferred": false,
+    "job_empty": true
+  },
+  "guards": {
+    "audit_events": [],
+    "launcher_attempts": [],
+    "platform_attempts": []
+  },
+  "helper_child_count": 0,
+  "terminal_child_count": 1,
+  "execution_seconds": 30,
+  "cleanup_seconds": 5,
+  "guards_remained_installed": true,
+  "end_utc_epoch": 1791811322.0221422,
+  "owner_thread": {
+    "name": "D2b-native-diagnostic-owner",
+    "explicit_non_main": true,
+    "daemon": false,
+    "joined": true,
+    "failures_propagated": true
+  }
+}

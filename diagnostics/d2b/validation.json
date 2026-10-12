@@ -1,0 +1,75 @@
+﻿{
+    "phase":  "D1G-D2B",
+    "status":  "STOP",
+    "original_result_sha256":  "af5b98f1971ca0f66d0808773e4aed787910fead65067308830ad39d2a120cdc",
+    "creation_counts":  {
+                            "wrapper_attempts":  1,
+                            "native_dispatches":  1,
+                            "known_successes":  1,
+                            "known_failures":  0,
+                            "uncertain_outcomes":  0
+                        },
+    "creation_classification":  "P1",
+    "resume":  {
+                   "native_dispatches":  1,
+                   "result":  1
+               },
+    "strict_stdout_matches":  false,
+    "strict_stderr_matches":  false,
+    "normalization":  "none permitted",
+    "root_exit":  true,
+    "exit_code":  0,
+    "job_empty":  true,
+    "job_active_observations":  [
+                                    1,
+                                    0
+                                ],
+    "stdout_eof":  true,
+    "stderr_eof":  true,
+    "termination_calls":  1,
+    "failure_reason":  "descendants_outlived_root",
+    "cleanup_issues":  [
+                           "failure"
+                       ],
+    "native_remaining":  {
+                             "handles":  0,
+                             "heap":  0,
+                             "local":  0,
+                             "attributes":  0
+                         },
+    "pending_io":  0,
+    "borrows":  0,
+    "all_ledger_resources_released":  true,
+    "domain":  {
+                   "state":  "open",
+                   "admission_closed":  false,
+                   "active":  false,
+                   "quarantined":  false,
+                   "quarantine_resolved":  false,
+                   "closure_completed":  false
+               },
+    "owner":  {
+                  "name":  "D2b-native-diagnostic-owner",
+                  "explicit_non_main":  true,
+                  "daemon":  false,
+                  "joined":  true,
+                  "failures_propagated":  true
+              },
+    "helper_child_count":  0,
+    "terminal_child_count":  1,
+    "regression":  {
+                       "live_diagnostic_excluded":  true,
+                       "seconds":  11.52,
+                       "added_pure_tests":  24,
+                       "passed":  1534
+                   },
+    "production_terminal":  "OFF",
+    "protected_core_unchanged":  true,
+    "target_v2_unchanged":  true,
+    "existing_tracked_files_unchanged":  true,
+    "staged":  false,
+    "committed":  false,
+    "pushed":  false,
+    "d3_readiness":  "BLOCKED: D2b STOP; exact output mismatch and post-root-exit active Job classification",
+    "retry_performed":  false
+}

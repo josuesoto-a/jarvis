@@ -1,0 +1,215 @@
+{
+  "phase": "D1G-D2B-R2A",
+  "status": "IMPLEMENTED_VALIDATED_WITH_REPORTING_DEVIATION_PRESERVED",
+  "timestamp": "2026-10-12T16:26:52.239Z",
+  "base": {
+    "HEAD": "722e4d0513d56f40853187e576c682ac9ca33691",
+    "origin_main": "722e4d0513d56f40853187e576c682ac9ca33691"
+  },
+  "initial_git_status": " M capabilities/terminal_runtime.py\n M capabilities/terminal_runtime_policy.md\n M capabilities/terminal_win32.py\n M tests/terminal_runtime_fakes.py\n M tests/terminal_win32_fakes.py\n M tests/test_action_worker.py\n M tests/test_terminal_runtime_win32.py\n?? diagnostics/d2b/\n?? diagnostics/d2b_r2/\n?? scripts/d2b_contract.py\n?? scripts/live_d1g_d2b_first_child.py\n?? scripts/run_r2_nonspawning_tests.py\n?? tests/test_d2b_diagnostic_contract.py\n?? tests/test_terminal_root_job_evidence.py\n",
+  "final_git_status": " M capabilities/terminal.py\n M capabilities/terminal_runtime.py\n M capabilities/terminal_runtime_policy.md\n M capabilities/terminal_win32.py\n M tests/terminal_runtime_fakes.py\n M tests/terminal_win32_fakes.py\n M tests/test_action_worker.py\n M tests/test_terminal_runtime_contract.py\n M tests/test_terminal_runtime_win32.py\n?? diagnostics/d2b/\n?? diagnostics/d2b_r2/\n?? diagnostics/d2b_r2a/\n?? scripts/d2b_contract.py\n?? scripts/live_d1g_d2b_first_child.py\n?? scripts/run_r2_nonspawning_tests.py\n?? tests/test_d2b_diagnostic_contract.py\n?? tests/test_terminal_host_validation.py\n?? tests/test_terminal_root_job_evidence.py\n",
+  "changed_for_r2a": [
+    "capabilities/terminal.py",
+    "tests/test_terminal_runtime_contract.py",
+    "tests/test_terminal_host_validation.py",
+    "diagnostics/d2b_r2a/"
+  ],
+  "preexisting_r2_changes_byte_preserved": true,
+  "historical_and_runner_hashes": {
+    "diagnostics/d1g_d2a_host_guard_stop.json": {
+      "before": "af6496c1d12a2785ba40dfe087837dd6ff930018ec2b3c3a62627bf6394f040b",
+      "after": "af6496c1d12a2785ba40dfe087837dd6ff930018ec2b3c3a62627bf6394f040b"
+    },
+    "diagnostics/d1g_d2a_independent_validation.json": {
+      "before": "9327a428a5f72aa4644854b8cb8cc269ec219cdf7d3b52cc0bbb66faba775703",
+      "after": "9327a428a5f72aa4644854b8cb8cc269ec219cdf7d3b52cc0bbb66faba775703"
+    },
+    "diagnostics/d1g_d2a_result.json": {
+      "before": "66f99ccbc72e5f76bd3f4ede29a1f7c09ca7bdd28f72bb002b61840fc4ffd00e",
+      "after": "66f99ccbc72e5f76bd3f4ede29a1f7c09ca7bdd28f72bb002b61840fc4ffd00e"
+    },
+    "diagnostics/d2b/README.md": {
+      "before": "6947dedb82677571c0fd483808ef931e3d83158f3cc8613facd59e96f22390bf",
+      "after": "6947dedb82677571c0fd483808ef931e3d83158f3cc8613facd59e96f22390bf"
+    },
+    "diagnostics/d2b/result.json": {
+      "before": "af5b98f1971ca0f66d0808773e4aed787910fead65067308830ad39d2a120cdc",
+      "after": "af5b98f1971ca0f66d0808773e4aed787910fead65067308830ad39d2a120cdc"
+    },
+    "diagnostics/d2b/single_attempt_reserved.json": {
+      "before": "8531e51bbbba0e2fccec9cb44528b99eb6e05acf4ea72d0545aafe5d4da96ba0",
+      "after": "8531e51bbbba0e2fccec9cb44528b99eb6e05acf4ea72d0545aafe5d4da96ba0"
+    },
+    "diagnostics/d2b/validation.json": {
+      "before": "c1bb5d263870251dcef6e50e724bbd38fa42fa690a6c633724c67c6afdad8e95",
+      "after": "c1bb5d263870251dcef6e50e724bbd38fa42fa690a6c633724c67c6afdad8e95"
+    },
+    "diagnostics/d2b_r2/guarded_focused.json": {
+      "before": "04725d7ab113d8a905562d8ba78deeca6dc1b4f1b51db4fcee9fac72e42c9bf8",
+      "after": "04725d7ab113d8a905562d8ba78deeca6dc1b4f1b51db4fcee9fac72e42c9bf8"
+    },
+    "diagnostics/d2b_r2/guarded_full.json": {
+      "before": "c9cce2b63302da733c1445513ba012c26b0b8094163c6d06b09601c29a4677f0",
+      "after": "c9cce2b63302da733c1445513ba012c26b0b8094163c6d06b09601c29a4677f0"
+    },
+    "diagnostics/d2b_r2/implementation.json": {
+      "before": "35f95c4d332d49e73519385b9446ef985d59d78f5fceed30bda7f14107a938c8",
+      "after": "35f95c4d332d49e73519385b9446ef985d59d78f5fceed30bda7f14107a938c8"
+    },
+    "diagnostics/previous_procedural_stop/d1g_d2a_host_guard_stop.json": {
+      "before": "af6496c1d12a2785ba40dfe087837dd6ff930018ec2b3c3a62627bf6394f040b",
+      "after": "af6496c1d12a2785ba40dfe087837dd6ff930018ec2b3c3a62627bf6394f040b"
+    },
+    "diagnostics/previous_procedural_stop/d1g_d2a_result.json": {
+      "before": "5711cca444e46c8be91d1fb4de4de82b79edfa648818e62d6db18dcf27e74269",
+      "after": "5711cca444e46c8be91d1fb4de4de82b79edfa648818e62d6db18dcf27e74269"
+    },
+    "diagnostics/previous_procedural_stop/live_d1g_d2a_diagnostics.py": {
+      "before": "1020848279bba8746b6a2fd447147477d22a19fd82f7b821b76a0c76bab17ac0",
+      "after": "1020848279bba8746b6a2fd447147477d22a19fd82f7b821b76a0c76bab17ac0"
+    },
+    "diagnostics/previous_procedural_stop/README.md": {
+      "before": "ecfc6e76de0890fd1dbe63d58a5038b1a6f809510b92f6a538ce2761e4e76618",
+      "after": "ecfc6e76de0890fd1dbe63d58a5038b1a6f809510b92f6a538ce2761e4e76618"
+    },
+    "diagnostics/README.md": {
+      "before": "35b5147e0e03ad3481afdfef14c8fab2fb489644f35cfcb10a6aced254c125a5",
+      "after": "35b5147e0e03ad3481afdfef14c8fab2fb489644f35cfcb10a6aced254c125a5"
+    },
+    "scripts/d2b_contract.py": {
+      "before": "6cb71277019d07b40c3f6f5b8ce94151f03ea6cdc3ce23959a991b020a7ced40",
+      "after": "6cb71277019d07b40c3f6f5b8ce94151f03ea6cdc3ce23959a991b020a7ced40"
+    },
+    "scripts/live_d1g_d2b_first_child.py": {
+      "before": "30b7ff5d9feb161d7e27cc111997d250e83546fca81b8fc37dda682620bc55f9",
+      "after": "30b7ff5d9feb161d7e27cc111997d250e83546fca81b8fc37dda682620bc55f9"
+    },
+    "scripts/run_r2_nonspawning_tests.py": {
+      "before": "759a45ed7997143441a5130e30035519056b47f0c78c664730bb7d210979bd0c",
+      "after": "759a45ed7997143441a5130e30035519056b47f0c78c664730bb7d210979bd0c"
+    }
+  },
+  "historical_files_identical": true,
+  "root_cause": "prepare_terminal_execution -> _validate_windows_host -> platform.machine -> platform.uname -> platform.win32_ver -> platform._syscmd_ver -> subprocess.check_output -> subprocess.Popen -> cmd.exe /c ver",
+  "previous_policy": {
+    "os_name": "nt",
+    "windows_major": 10,
+    "minimum_build": 10240,
+    "product_type": 1,
+    "machine_strings_case_insensitive": [
+      "AMD64",
+      "X86_64"
+    ],
+    "sys_maxsize": "> 2**32",
+    "contract": "native AMD64 OS architecture AND 64-bit Python; excludes ARM/emulation, Server and non-Windows"
+  },
+  "replacement": {
+    "native_source": "lazy kernel32 IsWow64Process2 on current-process pseudo-handle; require pNativeMachine == IMAGE_FILE_MACHINE_AMD64 (0x8664)",
+    "legacy_source": "only when IsWow64Process2 symbol is missing AND Windows build <16299, GetNativeSystemInfo with explicit SYSTEM_INFO layout; require wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 (9)",
+    "interpreter_evidence": "existing sys.maxsize > 2**32 check retained",
+    "fail_closed": "query FALSE, OSError, missing modern query, unknown/unsupported/unwritten native evidence reject; no fallback after call failure",
+    "imports": "ctypes imported only inside host query; no live backend/runtime initialization or registration",
+    "authoritative_platform_machine_removed": true
+  },
+  "validation": {
+    "compile": {
+      "exit_code": 0,
+      "result": "PASS",
+      "files": 3
+    },
+    "host_focused": {
+      "exit_code": 0,
+      "passed": 46
+    },
+    "guarded_focused": {
+      "exit_code": 0,
+      "passed": 898,
+      "report": "guarded_focused.json"
+    },
+    "regression_groups": {
+      "terminal_contract": 18,
+      "terminal_runtime_contract": 147,
+      "terminal_approval_integration": 90,
+      "pending_approval_identity": 8,
+      "local_terminal_approval": 63,
+      "r2_pid_evidence": 53,
+      "runtime_lifecycle_job": 172,
+      "runtime_win32": 72,
+      "native_contract": 181,
+      "action_worker": 48
+    },
+    "ordinary_full": {
+      "exit_code": 0,
+      "passed": 1633,
+      "failed": 0,
+      "log": "ordinary_full.log",
+      "xml_reporting": false
+    },
+    "guarded_full": {
+      "phase": "D1G-D2B-R2",
+      "pytest_exit_code": 0,
+      "collected": 1633,
+      "results": {
+        "passed": 1633,
+        "failed": 0,
+        "skipped": 0
+      },
+      "seconds": 17.391000000061467,
+      "blocked_process_events": {
+        "audit_events": [],
+        "launch_api_attempts": [],
+        "native_symbol_attempts": []
+      },
+      "winapi_launch_guard_retained": true,
+      "no_live_launch_evidence": true,
+      "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+      "historical_live_harness_invoked": false
+    },
+    "guarded_focused_report": {
+      "phase": "D1G-D2B-R2",
+      "pytest_exit_code": 0,
+      "collected": 898,
+      "results": {
+        "passed": 898,
+        "failed": 0,
+        "skipped": 0
+      },
+      "seconds": 11.313000000081956,
+      "blocked_process_events": {
+        "audit_events": [],
+        "launch_api_attempts": [],
+        "native_symbol_attempts": []
+      },
+      "winapi_launch_guard_retained": true,
+      "no_live_launch_evidence": true,
+      "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+      "historical_live_harness_invoked": false
+    }
+  },
+  "protected": {
+    "production_terminal": "OFF",
+    "production_registration_changed": false,
+    "target_contract": "terminal-execution-target/v2",
+    "target_projection_and_nonhost_source_equal_to_HEAD": true,
+    "ApprovalSubject_changed": false,
+    "PermissionEngine_changed": false,
+    "AUTORIZAR_changed": false,
+    "atomic_claim_changed": false,
+    "Planner_changed": false,
+    "Executor_authority_changed": false,
+    "d2b2_executed": false,
+    "live_terminal_children_created": 0,
+    "live_terminal_backend_loaded": false
+  },
+  "git": {
+    "index_byte_identical": true,
+    "staged": false,
+    "committed": false,
+    "pushed": false
+  },
+  "reporting_deviation": {
+    "evidence": "xml_reporting_attempt.json",
+    "note": "Optional pytest JUnit XML output invokes helper-capable platform.node at report finalization. Guarded attempt blocked subprocess.Popen; earlier ordinary XML attempt was unguarded and helper counts are unavailable. Both attempts preserved and excluded from clean validation. Both full suites were rerun without XML. Zero-event claims apply to the clean guarded pytest host only; test-host startup is excluded."
+  },
+  "recommendation": "R2A host-validation and R2 fake regression gates pass. Preserve all prior STOP and failure evidence. Keep production terminal OFF; no D2b2 or live activation authorization."
+}

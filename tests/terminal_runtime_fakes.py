@@ -9,7 +9,7 @@ import pytest
 from capabilities.terminal import TerminalExecutionTarget, _environment_identity
 from capabilities.terminal_runtime import (
     FileEvidence, ReadResult, StdioResources, StreamResources,
-    LaunchAdmissionDomain, WindowsTerminalRuntime,
+    LaunchAdmissionDomain, WindowsTerminalRuntime, JobPidSnapshot,
 )
 from terminal_fixtures import console_pe_bytes
 
@@ -79,6 +79,10 @@ class FakeRuntimeBackend:
         self.resumed = False
         self.exited = False
         self.active = 0
+        self.root_pid = 1
+        self.active_counts = deque()
+        self.pid_snapshots = deque()
+        self.pid_snapshot = JobPidSnapshot()
         self.exit = 0
         self.resume_count = 1
         self.member = True
@@ -194,6 +198,8 @@ class FakeRuntimeBackend:
         self._event("after_success")
         receipt.attach_process(launch.process)
         receipt.attach_thread(launch.thread)
+        if self.root_pid is not None:
+            receipt.record_root_pid(self.root_pid)
 
     def membership(self, process, job):
         self._event("membership", process.name, job.name)
@@ -244,7 +250,20 @@ class FakeRuntimeBackend:
 
     def job_active(self, job):
         self._event("job_active", job.name)
+        if self.active_counts:
+            observation = self.active_counts.popleft()
+            if isinstance(observation, BaseException):
+                raise observation
+            self.active = observation
         return self.active
+
+    def job_pids(self, job):
+        self._event("job_pids", job.name)
+        if self.pid_snapshots:
+            self.pid_snapshot = self.pid_snapshots.popleft()
+        if isinstance(self.pid_snapshot, BaseException):
+            raise self.pid_snapshot
+        return self.pid_snapshot
 
     def terminate_job(self, job):
         self._event("terminate_job", job.name)

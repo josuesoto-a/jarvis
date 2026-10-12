@@ -46,6 +46,11 @@ class FakeBindings:
         self.attributes = {}
         self.attribute_deleted = set()
         self.active = 0
+        self.root_pid = 1
+        self.active_counts = deque()
+        self.pid_snapshots = deque()
+        self.pid_snapshot = ()
+        self.pid_query_failure = None
         self.exited = False
         self.resumed = False
         self.exit = 0
@@ -147,6 +152,33 @@ class FakeBindings:
 
     def _QueryInformationJobObject(self, job, kind, info, size, length):
         assert self.handles[job]["kind"] == "job"
+        if kind == W.JobObjectBasicProcessIdList:
+            if self.pid_query_failure is not None:
+                self.error = self.pid_query_failure
+                return 0
+            if self.pid_snapshots:
+                self.pid_snapshot = self.pid_snapshots.popleft()
+            if isinstance(self.pid_snapshot, BaseException):
+                raise self.pid_snapshot
+            pids = tuple(self.pid_snapshot)
+            capacity = (size - 8) // C.sizeof(W.ULONG_PTR)
+            count = min(capacity, len(pids))
+            pointer(info, W.DWORD)[0] = len(pids)
+            pointer(info, W.DWORD)[1] = count
+            entries = C.cast(C.cast(info, W.LPVOID).value + 8, C.POINTER(W.ULONG_PTR))
+            for index, pid in enumerate(pids[:count]):
+                entries[index] = pid
+            pointer(length, W.DWORD)[0] = 8 + count * C.sizeof(W.ULONG_PTR)
+            if count != len(pids):
+                self.error = W.ERROR_MORE_DATA
+                return 0
+            return 1
+        assert kind == W.JobObjectBasicAccountingInformation
+        if self.active_counts:
+            observation = self.active_counts.popleft()
+            if isinstance(observation, BaseException):
+                raise observation
+            self.active = observation
         pointer(info, W.JOBOBJECT_BASIC_ACCOUNTING_INFORMATION).contents.ActiveProcesses = self.active
         pointer(length, W.DWORD)[0] = C.sizeof(W.JOBOBJECT_BASIC_ACCOUNTING_INFORMATION)
         return 1
@@ -207,7 +239,7 @@ class FakeBindings:
         }
         info = pointer(output, W.PROCESS_INFORMATION).contents
         info.hProcess, info.hThread = 0xE001, 0xE002
-        info.dwProcessId, info.dwThreadId = 1, 2
+        info.dwProcessId, info.dwThreadId = self.root_pid, 2
         if self.create_hook:
             self.create_hook()
         if self.creation == "CU":

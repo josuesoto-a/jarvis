@@ -1,0 +1,232 @@
+{
+  "phase": "D1G-D2B-R2",
+  "status": "IMPLEMENTED_PENDING_TEST_EXECUTION",
+  "base": {
+    ".git/HEAD": "ref: refs/heads/main",
+    ".git/refs/heads/main": "722e4d0513d56f40853187e576c682ac9ca33691",
+    ".git/refs/remotes/origin/main": "722e4d0513d56f40853187e576c682ac9ca33691"
+  },
+  "historical_artifacts_sha256": {
+    "diagnostics/d2b/result.json": "af5b98f1971ca0f66d0808773e4aed787910fead65067308830ad39d2a120cdc",
+    "diagnostics/d2b/validation.json": "c1bb5d263870251dcef6e50e724bbd38fa42fa690a6c633724c67c6afdad8e95",
+    "diagnostics/d2b/README.md": "6947dedb82677571c0fd483808ef931e3d83158f3cc8613facd59e96f22390bf",
+    "diagnostics/d2b/single_attempt_reserved.json": "8531e51bbbba0e2fccec9cb44528b99eb6e05acf4ea72d0545aafe5d4da96ba0",
+    "scripts/live_d1g_d2b_first_child.py": "30b7ff5d9feb161d7e27cc111997d250e83546fca81b8fc37dda682620bc55f9",
+    "scripts/d2b_contract.py": "6cb71277019d07b40c3f6f5b8ce94151f03ea6cdc3ce23959a991b020a7ced40",
+    "tests/test_d2b_diagnostic_contract.py": "307d2454e6c16e34a86a946c04c3d09a47268bc674f23214ca9e1a8a825ba11c"
+  },
+  "historical_artifacts_unchanged": true,
+  "tracked_changes": [
+    "capabilities/terminal_runtime.py",
+    "capabilities/terminal_runtime_policy.md",
+    "capabilities/terminal_win32.py",
+    "tests/terminal_runtime_fakes.py",
+    "tests/terminal_win32_fakes.py",
+    "tests/test_action_worker.py",
+    "tests/test_terminal_runtime_win32.py"
+  ],
+  "new_r2_files": [
+    "tests/test_terminal_root_job_evidence.py",
+    "scripts/run_r2_nonspawning_tests.py",
+    "diagnostics/d2b_r2/implementation.json"
+  ],
+  "protected_core_and_authority_unchanged": true,
+  "target_v2_unchanged": true,
+  "capture_normalization_unchanged": true,
+  "tests": {
+    "baseline_passed": 1534,
+    "focused_executed": false,
+    "full_executed": false,
+    "new_pass_count": null,
+    "blocker": "Automatic approval review rejected direct-Python exec request because runner inserts cmd.exe, explicitly forbidden by R2; awaiting narrow user decision. No test command ran."
+  },
+  "live_terminal_children_created": 0,
+  "live_backend_loaded": false,
+  "production_terminal": "OFF",
+  "staged": false,
+  "committed": false,
+  "pushed": false,
+  "index_unchanged": true,
+  "d2b2_executed": false,
+  "d2b2_readiness": "BLOCKED pending required fake and full regressions",
+  "source_locations": {
+    "capabilities/terminal_runtime.py": [
+      {
+        "line": 120,
+        "text": "class CreationSnapshot:"
+      },
+      {
+        "line": 707,
+        "text": "def record_root_pid(self, pid: int) -> None:"
+      },
+      {
+        "line": 946,
+        "text": "def _cleanup_confirmed_unlocked(self) -> bool:"
+      },
+      {
+        "line": 1230,
+        "text": "class JobPidSnapshot:"
+      },
+      {
+        "line": 1250,
+        "text": "class PostRootJobState(str, Enum):"
+      },
+      {
+        "line": 1258,
+        "text": "class PostRootJobObservation:"
+      },
+      {
+        "line": 1395,
+        "text": "def job_pids(self, job: object) -> JobPidSnapshot: ..."
+      },
+      {
+        "line": 1708,
+        "text": "def _cleanup(self, invocation, scope, job, exit_code):"
+      }
+    ],
+    "capabilities/terminal_win32.py": [
+      {
+        "line": 387,
+        "text": "def decode_job_pid_list(raw: bytes, returned_length: int, *, pointer_bytes: int,"
+      },
+      {
+        "line": 536,
+        "text": "def job_pids(self, job):"
+      },
+      {
+        "line": 809,
+        "text": "receipt.record_success()"
+      },
+      {
+        "line": 812,
+        "text": "receipt.record_root_pid(int(launch._information.dwProcessId))"
+      }
+    ],
+    "tests/test_terminal_root_job_evidence.py": [
+      {
+        "line": 29,
+        "text": "def test_root_exit_accounting_zero_needs_no_identity_query_or_termination():"
+      },
+      {
+        "line": 39,
+        "text": "def test_root_only_or_empty_identity_drains_without_false_membership(pids):"
+      },
+      {
+        "line": 54,
+        "text": "def test_complete_non_root_snapshot_requests_known_job_containment(pids):"
+      },
+      {
+        "line": 69,
+        "text": "def test_identity_failure_neither_fabricates_non_root_member_nor_empty(snapshot):"
+      },
+      {
+        "line": 82,
+        "text": "def test_non_root_identity_cannot_substitute_for_accounting_zero():"
+      },
+      {
+        "line": 93,
+        "text": "def test_real_deadline_or_cancellation_preempts_root_only_rundown(interrupt):"
+      },
+      {
+        "line": 113,
+        "text": "def test_root_only_never_drains_cleanup_failure_does_not_claim_descendant():"
+      },
+      {
+        "line": 124,
+        "text": "def test_missing_or_invalid_root_identity_preserves_p1_and_prevents_resume(root_pid):"
+      },
+      {
+        "line": 135,
+        "text": "def test_receipt_root_identity_is_observational_write_once_after_p1_and_adoption():"
+      },
+      {
+        "line": 139,
+        "text": "receipt.record_root_pid(1)"
+      },
+      {
+        "line": 142,
+        "text": "receipt.record_root_pid(1)  # CU, even when a caller supplies a plausible number."
+      },
+      {
+        "line": 143,
+        "text": "receipt.record_success()"
+      },
+      {
+        "line": 145,
+        "text": "receipt.record_root_pid(1)  # Ownership slots are still unattached."
+      },
+      {
+        "line": 149,
+        "text": "receipt.record_root_pid(123)"
+      },
+      {
+        "line": 154,
+        "text": "receipt.record_root_pid(123)"
+      },
+      {
+        "line": 156,
+        "text": "receipt.record_root_pid(456)"
+      },
+      {
+        "line": 161,
+        "text": "def test_semantic_cu_has_no_root_identity_query_or_handle_access():"
+      },
+      {
+        "line": 170,
+        "text": "def test_native_cu_does_not_query_pid_list_or_observe_process_information():"
+      },
+      {
+        "line": 180,
+        "text": "def test_native_root_pid_recording_follows_p1_and_handle_adoption(monkeypatch):"
+      },
+      {
+        "line": 198,
+        "text": "def test_native_invalid_pid_does_not_erase_creation_success():"
+      },
+      {
+        "line": 218,
+        "text": "def test_pure_decoder_pointer_width_and_zero_one_multiple_entries(width, pids):"
+      },
+      {
+        "line": 236,
+        "text": "def test_decoder_rejects_malformed_and_incomplete_responses(case, issue):"
+      },
+      {
+        "line": 254,
+        "text": "def test_backend_pid_query_is_bounded_semantic_and_single_dispatch(pids):"
+      },
+      {
+        "line": 277,
+        "text": "def test_backend_query_failure_has_no_partial_identity_or_retry(failure, issue):"
+      },
+      {
+        "line": 293,
+        "text": "def test_native_fake_count_and_identity_sequences_are_independent():"
+      },
+      {
+        "line": 306,
+        "text": "def test_termination_result_unavailable_is_not_retried_and_does_not_prove_empty():"
+      },
+      {
+        "line": 328,
+        "text": "def test_future_binary_payload_with_mock_standard_streams_preserves_exact_bytes(monkeypatch):"
+      },
+      {
+        "line": 345,
+        "text": "def test_future_binary_contract_rejects_crlf(stream):"
+      },
+      {
+        "line": 353,
+        "text": "def test_native_pid_list_layout_and_storage_bounds():"
+      }
+    ],
+    "scripts/run_r2_nonspawning_tests.py": [
+      {
+        "line": 6,
+        "text": "def main():"
+      }
+    ]
+  },
+  "capture_region_identical_to_base": true,
+  "native_api_signature_table_changed": false
+}

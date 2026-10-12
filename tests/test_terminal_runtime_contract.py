@@ -250,7 +250,8 @@ def test_unsupported_host_metadata_fails_without_api_calls(monkeypatch, major, b
     monkeypatch.setattr(terminal, "sys", SimpleNamespace(
         getwindowsversion=lambda: SimpleNamespace(major=major, build=build, product_type=product),
         maxsize=2**(bits - 1) - 1))
-    monkeypatch.setattr(terminal, "platform", SimpleNamespace(machine=lambda: machine))
+    monkeypatch.setattr(terminal, "_native_windows_machine",
+                        lambda _build: 0x8664 if machine == "AMD64" else 0xAA64)
     with pytest.raises(terminal.TerminalContractError, match="Windows 10/11"):
         terminal._validate_windows_host()
 
@@ -428,16 +429,37 @@ def test_changed_production_sources_have_no_launch_or_runtime_activation():
     root = Path(__file__).parents[1]
     banned = {"subprocess", "Popen", "system", "popen", "create_subprocess_exec",
               "create_subprocess_shell", "CreateProcess", "CreateProcessW", "ShellExecute",
-              "WinExec", "WinDLL", "windll"}
+              "WinExec", "WinDLL", "windll", "uname", "win32_ver", "_syscmd_ver"}
     for filename in ("capabilities/terminal.py", "integrations/local_terminal_approval.py"):
         tree = ast.parse((root / filename).read_text(encoding="utf-8"))
+        host_queries = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+                        and node.name == "_native_windows_machine"]
+        host_nodes = set(ast.walk(host_queries[0])) if host_queries else set()
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 modules = [item.name.split(".")[0] for item in node.names]
                 modules.append((getattr(node, "module", None) or "").split(".")[0])
-                assert not set(modules) & {"subprocess", "ctypes", "_winapi", "win32process", "win32job"}
+                forbidden_modules = {"subprocess", "ctypes", "_winapi", "win32process", "win32job", "platform"}
+                # Only the lazy host query may import ctypes, never a backend.
+                if node in host_nodes:
+                    forbidden_modules.remove("ctypes")
+                assert not set(modules) & forbidden_modules
             if isinstance(node, (ast.Name, ast.Attribute)):
-                assert getattr(node, "id", getattr(node, "attr", "")) not in banned
+                name = getattr(node, "id", getattr(node, "attr", ""))
+                if name == "WinDLL" and node in host_nodes:
+                    assert isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                    assert node.value.id == "C"
+                else:
+                    assert name not in banned
             if isinstance(node, ast.keyword) and node.arg == "shell":
                 assert not (isinstance(node.value, ast.Constant) and node.value.value is True)
+        if host_queries:
+            loads = [node for node in host_nodes if isinstance(node, ast.Call)
+                     and isinstance(node.func, ast.Attribute) and node.func.attr == "WinDLL"]
+            assert len(loads) == 1
+            assert len(loads[0].args) == 1 and isinstance(loads[0].args[0], ast.Constant)
+            assert loads[0].args[0].value == "kernel32"
+            symbols = {node.attr for node in host_nodes if isinstance(node, ast.Attribute)
+                       and isinstance(node.value, ast.Name) and node.value.id == "kernel"}
+            assert symbols == {"IsWow64Process2", "GetNativeSystemInfo"}
     assert "terminal" not in (root / "core/bootstrap.py").read_text(encoding="utf-8-sig")

@@ -648,3 +648,42 @@ Native review sources: [named-pipe security and logon SID access](https://learn.
 [ConnectNamedPipe overlapped and already-connected behavior](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-connectnamedpipe).
 
 Drive locality reference: [GetDriveTypeW documented return values](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdrivetypew).
+
+
+## D1G-D2B-R2: post-root observation evidence (non-spawning)
+
+Known native success still commits payload-free P1 before output inspection or
+attachment. A write-once root PID observation is recorded after both ownership
+slots are attached and is required before resume. It never authorizes handle
+access; P0/C1/CU cannot publish it. Missing identity preserves P1 and fails setup.
+
+Accounting zero is the independent Job-empty evidence. Positive accounting alone
+does not prove a descendant. A complete, bounded JobObjectBasicProcessIdList
+snapshot identifies associated PIDs at that observation. Root-only or empty
+identity with positive accounting is rundown/changing-snapshot evidence, and
+continues direct observation within the same cleanup deadline. No grace period,
+sleep predicate, PID-derived handle ownership or new Job process ceiling is added.
+
+Positive non-root membership can trigger existing known-Job containment policy,
+with reason non_root_job_member_after_root_exit. It does not prove ancestry or
+current execution. The legacy descendants_terminated field is not asserted from
+a PID list; observational membership and a successful termination request are
+reported separately. Termination is never Job-empty or EOF proof.
+
+Failed/incomplete/malformed/capacity-exhausted identity is runtime observation
+uncertainty, separate from CU. It fails the invocation and permits required known-
+Job containment. Confirmed cleanup may return OPEN; unresolved cleanup retains
+existing quarantine/poison semantics. Timeout, cancellation and cleanup safety
+failure still permit containment, including during root-only rundown. Budgets,
+kill-on-close, Job-last release and all four independent completion observations
+remain unchanged. CU never queries PID identity or uncertain process/thread data.
+
+The 1024-entry query capacity and 16-entry retained observation trace bound
+observation storage only; job_resource_policy remains unresolved-no-activation/v1.
+The query performs one native call without allocation growth/retry. Native host
+support remains Windows x64; 32-bit PID layout decoding is pure-test coverage only.
+
+Capture decoding/newlines, target/v2, approval identity and production authority
+are unchanged. A future binary-output argv is a new frozen target requiring a
+separately authorized D1G-D2B2. Historical D2b STOP and its marker remain intact.
+No new live compatibility result is claimed by these implementation changes.

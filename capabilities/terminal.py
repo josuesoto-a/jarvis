@@ -12,7 +12,6 @@ from dataclasses import dataclass, field, fields
 from hashlib import sha256
 import json
 import os
-import platform
 from pathlib import Path, PureWindowsPath
 import stat
 import struct
@@ -683,13 +682,73 @@ def prepare_terminal_execution(
     )
 
 
+def _native_windows_machine(windows_build: int) -> int:
+    """Read native OS machine evidence in-process, without runtime bindings.
+
+    GetNativeSystemInfo can report an emulated AMD64 machine on ARM64. Prefer
+    IsWow64Process2; use the older query only before Windows 10 1709 (16299),
+    before Windows on ARM64 support. Missing modern APIs never trigger fallback.
+    """
+    import ctypes as C
+
+    kernel = C.WinDLL("kernel32", use_last_error=True)
+    try:
+        query = kernel.IsWow64Process2
+    except AttributeError:
+        if windows_build >= 16299:
+            raise
+
+        class SystemInfo(C.Structure):
+            _fields_ = [
+                ("wProcessorArchitecture", C.c_uint16),
+                ("wReserved", C.c_uint16),
+                ("dwPageSize", C.c_uint32),
+                ("lpMinimumApplicationAddress", C.c_void_p),
+                ("lpMaximumApplicationAddress", C.c_void_p),
+                ("dwActiveProcessorMask", C.c_size_t),
+                ("dwNumberOfProcessors", C.c_uint32),
+                ("dwProcessorType", C.c_uint32),
+                ("dwAllocationGranularity", C.c_uint32),
+                ("wProcessorLevel", C.c_uint16),
+                ("wProcessorRevision", C.c_uint16),
+            ]
+
+        query = kernel.GetNativeSystemInfo
+        query.argtypes = [C.POINTER(SystemInfo)]
+        query.restype = None
+        info = SystemInfo()
+        info.wProcessorArchitecture = 0xFFFF  # Unwritten output fails closed.
+        query(C.byref(info))
+        return 0x8664 if info.wProcessorArchitecture == 9 else 0
+
+    query.argtypes = [C.c_void_p, C.POINTER(C.c_uint16), C.POINTER(C.c_uint16)]
+    query.restype = C.c_int32
+    process_machine = C.c_uint16(0xFFFF)
+    native_machine = C.c_uint16(0xFFFF)
+    # GetCurrentProcess's documented pseudo-handle; no acquired handle to close.
+    if not query(C.c_void_p(-1), C.byref(process_machine), C.byref(native_machine)):
+        raise OSError("IsWow64Process2 failed")
+    return native_machine.value
+
+
 def _validate_windows_host() -> None:
+    """Require native AMD64 Windows 10/11 workstation AND 64-bit Python.
+
+    OS version/product and interpreter width retain the existing policy. Native
+    architecture is direct Win32 evidence, never platform or environment text.
+    No live terminal backend is imported, initialized or constructed here.
+    """
     if os.name != "nt":
         raise TerminalContractError("terminal execution target supports Windows only")
     version = sys.getwindowsversion()
     if (version.major != 10 or version.build < 10240 or version.product_type != 1
-            or platform.machine().upper() not in {"AMD64", "X86_64"}
             or sys.maxsize <= 2**32):
+        raise TerminalContractError("terminal requires Windows 10/11 x64 workstation and 64-bit Python")
+    try:
+        native_machine = _native_windows_machine(version.build)
+    except (AttributeError, OSError) as error:
+        raise TerminalContractError("cannot determine native Windows architecture") from error
+    if native_machine != 0x8664:
         raise TerminalContractError("terminal requires Windows 10/11 x64 workstation and 64-bit Python")
 
 

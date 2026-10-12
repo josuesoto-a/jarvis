@@ -130,8 +130,12 @@ class CreationSnapshot:
     result_pending: bool
     process_attached: bool
     thread_attached: bool
+    root_pid: int | None = None
 
     def __post_init__(self) -> None:
+        if self.root_pid is not None and (not self.process_created or type(self.root_pid) is not int
+                                          or not 0 < self.root_pid <= 0xFFFFFFFF):
+            raise ValueError("root PID requires known P1 and a valid observational identity")
         if type(self.call_count) is not int or self.call_count not in {0, 1}:
             raise ValueError("creation has at most one call")
         if any(type(value) is not bool for value in (
@@ -638,6 +642,7 @@ class CreationReceipt:
         self._attempted = False
         self._failed = False
         self._success = False
+        self._root_pid = None
 
     def _snapshot_unlocked(self) -> CreationSnapshot:
         created = self._success
@@ -649,7 +654,7 @@ class CreationReceipt:
         resources = self._invocation.resources._resources
         return CreationSnapshot(int(self._attempted), classification, created, pending,
                                 resources["root-process"]._payload is not None,
-                                resources["primary-thread"]._payload is not None)
+                                resources["primary-thread"]._payload is not None, self._root_pid)
 
     def snapshot(self) -> CreationSnapshot:
         with self._invocation._domain._condition:
@@ -698,6 +703,19 @@ class CreationReceipt:
             if payloads is not None:
                 self._attach_unlocked("root-process", payloads[0])
                 self._attach_unlocked("primary-thread", payloads[1])
+
+    def record_root_pid(self, pid: int) -> None:
+        """Write-once observation AFTER P1/adoption; never handle authority."""
+        with self._invocation._domain._condition:
+            resources = self._invocation.resources._resources
+            if (not self._success or self._root_pid is not None
+                    or resources["root-process"]._payload is None
+                    or resources["primary-thread"]._payload is None
+                    or self._invocation._phase in {InvocationPhase.FINISHED, InvocationPhase.QUARANTINED}):
+                raise TerminalLifecycleError("root PID cannot be recorded")
+            if type(pid) is not int or not 0 < pid <= 0xFFFFFFFF:
+                raise TerminalLifecycleError("invalid observational root PID")
+            self._root_pid = pid
 
     def _attach_unlocked(self, name: str, payload: object) -> None:
         ledger = self._invocation.resources
@@ -1196,6 +1214,83 @@ class CaptureAccumulator:
         return self._final
 
 
+# Observation/storage bounds only; these are NOT Job process limits.
+JOB_PID_OBSERVATION_CAPACITY = 1024
+POST_ROOT_OBSERVATION_LIMIT = 16
+
+
+class JobPidQueryIssue(str, Enum):
+    QUERY_FAILED = "query_failed"
+    INCOMPLETE = "incomplete"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+    MALFORMED = "malformed"
+
+
+@dataclass(frozen=True, slots=True)
+class JobPidSnapshot:
+    """Complete association snapshot or explicit uncertainty, never partial PIDs."""
+    pids: tuple[int, ...] = ()
+    issue: JobPidQueryIssue | None = None
+
+    def __post_init__(self):
+        if type(self.pids) is not tuple or len(self.pids) > JOB_PID_OBSERVATION_CAPACITY:
+            raise ValueError("bounded immutable PID snapshot required")
+        if any(type(pid) is not int or not 0 < pid <= 0xFFFFFFFF for pid in self.pids):
+            raise ValueError("invalid PID observation")
+        if len(set(self.pids)) != len(self.pids):
+            raise ValueError("duplicate PID observation")
+        if self.issue is not None and (type(self.issue) is not JobPidQueryIssue or self.pids):
+            raise ValueError("uncertain identity cannot contain authoritative PIDs")
+
+    @property
+    def complete(self) -> bool:
+        return self.issue is None
+
+
+class PostRootJobState(str, Enum):
+    JOB_EMPTY = "job_empty"
+    ROOT_EXITED_JOB_DRAINING = "root_exited_job_draining"
+    NON_ROOT_JOB_MEMBER_AFTER_ROOT_EXIT = "non_root_job_member_after_root_exit"
+    JOB_IDENTITY_UNCERTAIN = "job_identity_uncertain"
+
+
+@dataclass(frozen=True, slots=True)
+class PostRootJobObservation:
+    active_processes: int | None
+    pid_snapshot: JobPidSnapshot | None
+    state: PostRootJobState
+
+    def __post_init__(self):
+        if self.active_processes is not None and (type(self.active_processes) is not int
+                                                  or not 0 <= self.active_processes <= 0xFFFFFFFF):
+            raise ValueError("invalid Job accounting observation")
+        if self.pid_snapshot is not None and type(self.pid_snapshot) is not JobPidSnapshot:
+            raise TypeError("semantic Job identity snapshot required")
+        if type(self.state) is not PostRootJobState:
+            raise TypeError("explicit post-root Job state required")
+
+    @property
+    def snapshot_disagreement(self) -> bool:
+        return (self.active_processes is not None and self.active_processes > 0
+                and self.pid_snapshot is not None and self.pid_snapshot.complete
+                and not self.pid_snapshot.pids)
+
+
+def classify_post_root_job(active: int | None, root_pid: int | None,
+                           snapshot: JobPidSnapshot | None) -> PostRootJobObservation:
+    """Account zero independently; compare complete identities without liveness claims."""
+    if active == 0:
+        state = PostRootJobState.JOB_EMPTY
+    elif (active is None or type(root_pid) is not int or not 0 < root_pid <= 0xFFFFFFFF
+          or snapshot is None or not snapshot.complete):
+        state = PostRootJobState.JOB_IDENTITY_UNCERTAIN
+    elif any(pid != root_pid for pid in snapshot.pids):
+        state = PostRootJobState.NON_ROOT_JOB_MEMBER_AFTER_ROOT_EXIT
+    else:
+        state = PostRootJobState.ROOT_EXITED_JOB_DRAINING
+    return PostRootJobObservation(active, snapshot, state)
+
+
 @dataclass(frozen=True, slots=True)
 class TerminalExecutionEvidence:
     exit_code: int | None
@@ -1207,6 +1302,9 @@ class TerminalExecutionEvidence:
     failure_stage: str | None
     reason_code: str | None
     descendants_terminated: bool
+    post_root_job_observations: tuple[PostRootJobObservation, ...] = ()
+    non_root_job_member_observed: bool = False
+    job_termination_requested: bool = False
 
     def __post_init__(self):
         if (self.exit_code is not None and
@@ -1217,6 +1315,12 @@ class TerminalExecutionEvidence:
         if (type(self.duration_seconds) is not float or not isfinite(self.duration_seconds)
                 or self.duration_seconds < 0 or type(self.descendants_terminated) is not bool):
             raise ValueError("invalid runtime execution evidence")
+        if (type(self.post_root_job_observations) is not tuple
+                or len(self.post_root_job_observations) > POST_ROOT_OBSERVATION_LIMIT
+                or any(type(item) is not PostRootJobObservation for item in self.post_root_job_observations)
+                or type(self.non_root_job_member_observed) is not bool
+                or type(self.job_termination_requested) is not bool):
+            raise ValueError("invalid bounded Job observation evidence")
 
     @property
     def acceptable(self) -> bool:
@@ -1288,6 +1392,7 @@ class TerminalBackend(Protocol):
     def root_exited(self, process: object) -> bool: ...
     def exit_code(self, process: object) -> int: ...
     def job_active(self, job: object) -> int: ...
+    def job_pids(self, job: object) -> JobPidSnapshot: ...
     def terminate_job(self, job: object) -> None: ...
     def wait(self, process: object | None, memories: tuple[object, ...], seconds: float) -> None: ...
     def release(self, resource: object) -> bool: ...
@@ -1405,7 +1510,10 @@ class WindowsTerminalRuntime:
         verified = None
         environment_identity = None
         exit_code = None
-        descendants = False
+        job_reason = None
+        non_root_member = False
+        job_termination_requested = False
+        job_observations = ()
         try:
             if type(target) is not TerminalExecutionTarget:
                 raise TerminalContractError("exact terminal target required")
@@ -1491,6 +1599,9 @@ class WindowsTerminalRuntime:
                 raise _RuntimeStop()
             if not invocation.adopt_created():
                 raise _RuntimeStop()
+            stage = "root_identity"
+            if receipt.root_pid is None:
+                raise TerminalLifecycleError("known P1 root PID is missing")
             stage = "post_create_setup"
             for resource in scope.creation_only:
                 if not self._release(invocation, resource):
@@ -1540,7 +1651,8 @@ class WindowsTerminalRuntime:
                        CleanupReason.PREFLIGHT_FAILURE)
             invocation.begin_cleanup(trigger)
         try:
-            descendants, exit_code = self._cleanup(invocation, scope, job, exit_code)
+            job_reason, non_root_member, job_termination_requested, job_observations, exit_code = (
+                self._cleanup(invocation, scope, job, exit_code))
         except BaseException:
             invocation.record_cleanup_issue(CleanupIssue.FAILURE)
             invocation.quarantine(QuarantineReason.INCOMPLETE_CLEANUP)
@@ -1552,8 +1664,8 @@ class WindowsTerminalRuntime:
         if reason is None and trigger is CleanupReason.ROOT_EXIT:
             if not invocation.cleanup_evidence().cleanup_completed:
                 reason = "cleanup_incomplete"
-            elif descendants:
-                reason = "descendants_outlived_root"
+            elif job_reason is not None:
+                reason = job_reason
             elif exit_code != 0:
                 reason = "exit_nonzero"
             elif not all(c.complete for c in captures.values()) or len(captures) != 2:
@@ -1566,8 +1678,11 @@ class WindowsTerminalRuntime:
             exit_code, captures.get("stdout", missing), captures.get("stderr", missing),
             verified, environment_identity, max(0.0, self._now() - started),
             ("cleanup" if reason in {"cleanup_incomplete", "cleanup_failure",
-                                     "capture_incomplete", "descendants_outlived_root"}
-             else stage if reason is not None else None), reason, descendants)
+                                     "capture_incomplete", "non_root_job_member_after_root_exit",
+                                     "job_identity_uncertain", "cancelled_during_job_drain",
+                                     "execution_timeout_during_job_drain", "job_cleanup_unconfirmed"}
+             else stage if reason is not None else None), reason, False,
+            job_observations, non_root_member, job_termination_requested)
         outcome = invocation.outcome()
         return TerminalRuntimeOutcome(outcome.cleanup, outcome.process_resumed,
                                       outcome.terminal_trigger, outcome.cleanup_issues, execution)
@@ -1595,10 +1710,76 @@ class WindowsTerminalRuntime:
         receipt = snap.creation
         process = (invocation.resources.resource("root-process")
                    if receipt.process_created and receipt.process_attached else None)
-        descendants = False
         containment = False
+        termination_attempted = False
         termination_requested = False
         membership_failed = False
+        job_reason = None
+        non_root_member = False
+        observations = []
+
+        def request_termination():
+            nonlocal termination_attempted, termination_requested
+            if termination_attempted:
+                return
+            termination_attempted = True  # Never retry an unavailable native result.
+            try:
+                self._call(invocation, self._backend.terminate_job, job)
+                termination_requested = True
+            except BaseException:
+                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+
+        def observe_job():
+            nonlocal containment, job_reason, non_root_member
+            active = None
+            try:
+                active = self._call(invocation, self._backend.job_active, job)
+                if type(active) is not int or not 0 <= active <= 0xFFFFFFFF:
+                    active = None
+                    raise TerminalLifecycleError("invalid Job accounting")
+                if active == 0:
+                    invocation.confirm_job_empty()
+                    containment = True
+                    if invocation.snapshot().process_exited:
+                        invocation.confirm_containment_empty()
+            except BaseException:
+                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            current = invocation.snapshot()
+            # CU never supplies a root identity and never enters PID observation.
+            if (receipt.process_created and current.process_exited
+                    and snap.cleanup_reason is CleanupReason.ROOT_EXIT):
+                identity = None
+                if active is not None and active > 0 and receipt.root_pid is not None:
+                    try:
+                        identity = self._call(invocation, self._backend.job_pids, job)
+                        if type(identity) is not JobPidSnapshot:
+                            identity = JobPidSnapshot(issue=JobPidQueryIssue.MALFORMED)
+                    except BaseException:
+                        identity = JobPidSnapshot(issue=JobPidQueryIssue.QUERY_FAILED)
+                observation = classify_post_root_job(active, receipt.root_pid, identity)
+                if len(observations) < POST_ROOT_OBSERVATION_LIMIT:
+                    observations.append(observation)
+                else:
+                    # Preserve first decisive identity evidence plus the latest
+                    # accounting observation even after a long bounded trace.
+                    decisive = {PostRootJobState.NON_ROOT_JOB_MEMBER_AFTER_ROOT_EXIT,
+                                PostRootJobState.JOB_IDENTITY_UNCERTAIN}
+                    if observation.state in decisive and not any(
+                            item.state is observation.state for item in observations[:-1]):
+                        slot = -2 if observation.state is PostRootJobState.NON_ROOT_JOB_MEMBER_AFTER_ROOT_EXIT else -3
+                        observations[slot] = observation
+                    observations[-1] = observation
+                if observation.state is PostRootJobState.NON_ROOT_JOB_MEMBER_AFTER_ROOT_EXIT:
+                    non_root_member = True
+                    if job_reason is None:
+                        job_reason = "non_root_job_member_after_root_exit"
+                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+                elif observation.state is PostRootJobState.JOB_IDENTITY_UNCERTAIN:
+                    if job_reason is None:
+                        job_reason = "job_identity_uncertain"
+                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            return active
+
         if (process is not None and job is not None
                 and snap.cleanup_reason is CleanupReason.ROOT_EXIT):
             try:
@@ -1608,24 +1789,11 @@ class WindowsTerminalRuntime:
             if membership_failed:
                 invocation.record_cleanup_issue(CleanupIssue.FAILURE)
         if job is not None and (receipt.process_created or receipt.result_pending):
-            active = None
-            try:
-                active = self._call(invocation, self._backend.job_active, job)
-                if active == 0:
-                    invocation.confirm_job_empty()
-            except BaseException:
-                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
-            descendants = (snap.cleanup_reason is CleanupReason.ROOT_EXIT
-                           and active is not None and active > 0)
-            if descendants:
-                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            active = observe_job()
             if (receipt.result_pending or snap.cleanup_reason is not CleanupReason.ROOT_EXIT
-                    or active != 0 or membership_failed):
-                try:
-                    self._call(invocation, self._backend.terminate_job, job)
-                    termination_requested = True
-                except BaseException:
-                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+                    or active is None or membership_failed or non_root_member
+                    or job_reason == "job_identity_uncertain"):
+                request_termination()
         # Known parent writers must close to make EOF observable, including P0/C1.
         for resource in scope.creation_only:
             if receipt.result_pending and resource.snapshot().name in {"launch", "attributes"}:
@@ -1642,14 +1810,22 @@ class WindowsTerminalRuntime:
                 except BaseException:
                     invocation.record_cleanup_issue(CleanupIssue.FAILURE)
             if job is not None and (receipt.process_created or receipt.result_pending):
-                try:
-                    if self._call(invocation, self._backend.job_active, job) == 0:
-                        invocation.confirm_job_empty()
-                        containment = True
-                        if invocation.snapshot().process_exited:
-                            invocation.confirm_containment_empty()
-                except BaseException:
-                    invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+                current = invocation.snapshot()
+                if snap.cleanup_reason is CleanupReason.ROOT_EXIT and not containment:
+                    # Real deadline/cancel evidence, never a rundown grace period.
+                    if current.cancellation_reason is not None:
+                        if job_reason is None:
+                            job_reason = "cancelled_during_job_drain"
+                        invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+                        request_termination()
+                    elif self._now() >= current.execution_deadline:
+                        if job_reason is None:
+                            job_reason = "execution_timeout_during_job_drain"
+                        invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+                        request_termination()
+                active = observe_job()
+                if active is None or non_root_member or job_reason == "job_identity_uncertain":
+                    request_termination()
             for stream in scope.streams:
                 if stream.operation is None or stream.stopped:
                     continue
@@ -1682,6 +1858,13 @@ class WindowsTerminalRuntime:
             except BaseException:
                 invocation.record_cleanup_issue(CleanupIssue.FAILURE)
                 break
+        if job is not None and (receipt.process_created or receipt.result_pending) and not containment:
+            # Safety failure is separate from descendant evidence. No budget reset
+            # or post-deadline wait can turn this request into cleanup proof.
+            invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            if job_reason is None and snap.cleanup_reason is CleanupReason.ROOT_EXIT:
+                job_reason = "job_cleanup_unconfirmed"
+            request_termination()
         # Last opportunity to request cancellation, never evidence of completion.
         for stream in scope.streams:
             if stream.operation is not None and not stream.operation.completed and not stream.cancel_sent:
@@ -1714,4 +1897,4 @@ class WindowsTerminalRuntime:
         except TerminalLifecycleError:
             invocation.quarantine(QuarantineReason.CREATION_UNCERTAIN if receipt.result_pending
                                   else QuarantineReason.INCOMPLETE_CLEANUP)
-        return (descendants and termination_requested and invocation.snapshot().containment_empty), exit_code
+        return job_reason, non_root_member, termination_requested, tuple(observations), exit_code

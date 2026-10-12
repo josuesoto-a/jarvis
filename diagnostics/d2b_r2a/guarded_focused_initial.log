@@ -1,0 +1,49 @@
+........................................................................ [  8%]
+........................................................................ [ 16%]
+..................................................................F..... [ 24%]
+........................................................................ [ 32%]
+........................................................................ [ 40%]
+........................................................................ [ 48%]
+........................................................................ [ 56%]
+........................................................................ [ 64%]
+........................................................................ [ 72%]
+........................................................................ [ 80%]
+........................................................................ [ 88%]
+........................................................................ [ 96%]
+..................................                                       [100%]
+================================== FAILURES ===================================
+____ test_changed_production_sources_have_no_launch_or_runtime_activation _____
+
+    def test_changed_production_sources_have_no_launch_or_runtime_activation():
+        root = Path(__file__).parents[1]
+        banned = {"subprocess", "Popen", "system", "popen", "create_subprocess_exec",
+                  "create_subprocess_shell", "CreateProcess", "CreateProcessW", "ShellExecute",
+                  "WinExec", "WinDLL", "windll", "machine", "uname", "win32_ver", "_syscmd_ver"}
+        for filename in ("capabilities/terminal.py", "integrations/local_terminal_approval.py"):
+            tree = ast.parse((root / filename).read_text(encoding="utf-8"))
+            host_queries = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+                            and node.name == "_native_windows_machine"]
+            host_nodes = set(ast.walk(host_queries[0])) if host_queries else set()
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    modules = [item.name.split(".")[0] for item in node.names]
+                    modules.append((getattr(node, "module", None) or "").split(".")[0])
+                    forbidden_modules = {"subprocess", "ctypes", "_winapi", "win32process", "win32job", "platform"}
+                    # Only the lazy host query may import ctypes, never a backend.
+                    if node in host_nodes:
+                        forbidden_modules.remove("ctypes")
+                    assert not set(modules) & forbidden_modules
+                if isinstance(node, (ast.Name, ast.Attribute)):
+                    name = getattr(node, "id", getattr(node, "attr", ""))
+                    if name == "WinDLL" and node in host_nodes:
+                        assert isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                        assert node.value.id == "C"
+                    else:
+>                       assert name not in banned
+E                       AssertionError: assert 'machine' not in {'CreateProcess', 'CreateProcessW', 'Popen', 'ShellExecute', 'WinDLL', 'WinExec', ...}
+
+tests\test_terminal_runtime_contract.py:453: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_terminal_runtime_contract.py::test_changed_production_sources_have_no_launch_or_runtime_activation
+1 failed, 897 passed in 9.27s
+{"phase": "D1G-D2B-R2", "pytest_exit_code": 1, "collected": 898, "results": {"passed": 897, "failed": 1, "skipped": 0}, "seconds": 9.625, "blocked_process_events": {"audit_events": [], "launch_api_attempts": [], "native_symbol_attempts": []}, "winapi_launch_guard_retained": true, "no_live_launch_evidence": true, "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded", "historical_live_harness_invoked": false}

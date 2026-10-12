@@ -10,6 +10,7 @@ from __future__ import annotations
 import ctypes as C
 import os
 import re
+import struct
 from threading import Thread, current_thread, main_thread
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from capabilities.terminal import _validate_local_path_form, _validate_windows_h
 from capabilities.terminal_runtime import (
     BackendResourceScope, CreationReceipt, FileEvidence, ReadResult,
     StdioResources, StreamResources, TerminalLifecycleError,
+    JobPidSnapshot, JobPidQueryIssue, JOB_PID_OBSERVATION_CAPACITY,
 )
 
 BOOL = C.c_int32
@@ -101,6 +103,16 @@ class JOBOBJECT_BASIC_ACCOUNTING_INFORMATION(C.Structure):
                 ("ActiveProcesses", DWORD), ("TotalTerminatedProcesses", DWORD)]
 
 
+class JOBOBJECT_BASIC_PROCESS_ID_LIST(C.Structure):
+    _fields_ = [("NumberOfAssignedProcesses", DWORD), ("NumberOfProcessIdsInList", DWORD),
+                ("ProcessIdList", ULONG_PTR * 1)]
+
+
+class _JobPidListStorage(C.Structure):
+    _fields_ = [("NumberOfAssignedProcesses", DWORD), ("NumberOfProcessIdsInList", DWORD),
+                ("ProcessIdList", ULONG_PTR * JOB_PID_OBSERVATION_CAPACITY)]
+
+
 class FILETIME(C.Structure):
     _fields_ = [("dwLowDateTime", DWORD), ("dwHighDateTime", DWORD)]
 
@@ -153,6 +165,8 @@ PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
 PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 JobObjectBasicAccountingInformation = 1
+JobObjectBasicProcessIdList = 3
+ERROR_MORE_DATA = 234
 JobObjectExtendedLimitInformation = 9
 TOKEN_QUERY = 8
 TokenGroups = 2
@@ -369,6 +383,36 @@ class _PreparedLaunch:
         self._create_call = None
 
 
+
+def decode_job_pid_list(raw: bytes, returned_length: int, *, pointer_bytes: int,
+                        capacity: int = JOB_PID_OBSERVATION_CAPACITY) -> JobPidSnapshot:
+    """Pure bounded little-endian ABI decoding; never trust partial identities."""
+    malformed = JobPidSnapshot(issue=JobPidQueryIssue.MALFORMED)
+    if (type(raw) is not bytes or pointer_bytes not in {4, 8}
+            or type(pointer_bytes) is not int or type(capacity) is not int
+            or not 1 <= capacity <= JOB_PID_OBSERVATION_CAPACITY
+            or type(returned_length) is not int
+            or not 8 <= returned_length <= len(raw) <= 8 + capacity * pointer_bytes):
+        return malformed
+    assigned, count = struct.unpack_from("<II", raw)
+    if count > capacity or count > assigned:
+        return malformed
+    if assigned > capacity:
+        return JobPidSnapshot(issue=JobPidQueryIssue.CAPACITY_EXHAUSTED)
+    if count != assigned:
+        return JobPidSnapshot(issue=JobPidQueryIssue.INCOMPLETE)
+    required = 8 + count * pointer_bytes
+    if returned_length < required:
+        return JobPidSnapshot(issue=JobPidQueryIssue.INCOMPLETE)
+    code = "I" if pointer_bytes == 4 else "Q"
+    pids = tuple(struct.unpack_from("<" + code, raw, 8 + index * pointer_bytes)[0]
+                 for index in range(count))
+    try:
+        return JobPidSnapshot(pids)
+    except (TypeError, ValueError):
+        return malformed
+
+
 class Win32TerminalBackend:
     """Explicit construction is the ONLY live-loader boundary.
 
@@ -488,6 +532,21 @@ class Win32TerminalBackend:
         if length.value != C.sizeof(info):
             raise TerminalLifecycleError("Job accounting result size differs")
         return int(info.ActiveProcesses)
+
+    def job_pids(self, job):
+        """One bounded synchronous query; capacity is not a containment limit."""
+        self._check(job)
+        width = C.sizeof(ULONG_PTR)
+        storage = _JobPidListStorage()
+        length = DWORD()
+        success = self._api.QueryInformationJobObject(
+            job._raw(), JobObjectBasicProcessIdList, C.byref(storage),
+            C.sizeof(storage), C.byref(length))
+        if not success:
+            issue = (JobPidQueryIssue.CAPACITY_EXHAUSTED
+                     if self._api.last_error() == ERROR_MORE_DATA else JobPidQueryIssue.QUERY_FAILED)
+            return JobPidSnapshot(issue=issue)
+        return decode_job_pid_list(bytes(storage), length.value, pointer_bytes=width)
 
     def terminate_job(self, job):
         self._check(job)
@@ -750,6 +809,7 @@ class Win32TerminalBackend:
             receipt.record_success()
             receipt.attach_process(launch._process)
             receipt.attach_thread(launch._thread)
+            receipt.record_root_pid(int(launch._information.dwProcessId))
         else:
             receipt.record_failed()
 

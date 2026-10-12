@@ -1,0 +1,903 @@
+{
+  "phase": "D1G-D2a",
+  "run_kind": "clean-revalidation",
+  "superseded_previous_attempt": "previous_procedural_stop/d1g_d2a_result.json (STOP, not PASS)",
+  "scope": "this isolated -I -S -B guarded diagnostic interpreter only; ordinary tests excluded",
+  "diagnostic_pid": 30072,
+  "start_utc_epoch": 1791582904.9698656,
+  "startup_flags": {
+    "isolated": 1,
+    "no_site": 1,
+    "dont_write_bytecode": 1
+  },
+  "live_backend_constructed": true,
+  "create_process_resolved": true,
+  "host": {
+    "windows": [
+      10,
+      0,
+      19045,
+      2,
+      ""
+    ],
+    "product_type": 1,
+    "architecture": "AMD64 (IsWow64Process2 native evidence)",
+    "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "implementation": "cpython",
+    "version_info": [
+      3,
+      11,
+      9,
+      "final",
+      0
+    ],
+    "maxsize": 9223372036854775807,
+    "host_check": "diagnostic-local direct-native adapter; same host policy",
+    "interpreter": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "pointer_bytes": 8,
+    "wchar_bytes": 2,
+    "process_machine": 0,
+    "native_machine": 34404,
+    "abi_structure_sizes": {
+      "SECURITY_ATTRIBUTES": 24,
+      "STARTUPINFOW": 104,
+      "STARTUPINFOEXW": 112,
+      "PROCESS_INFORMATION": 24,
+      "OVERLAPPED": 32,
+      "JOBOBJECT_BASIC_LIMIT_INFORMATION": 64,
+      "IO_COUNTERS": 48,
+      "JOBOBJECT_EXTENDED_LIMIT_INFORMATION": 144,
+      "JOBOBJECT_BASIC_ACCOUNTING_INFORMATION": 48,
+      "BY_HANDLE_FILE_INFORMATION": 52,
+      "SID_AND_ATTRIBUTES": 16,
+      "TOKEN_GROUPS": 24
+    }
+  },
+  "binding_symbols": [
+    "CancelIoEx",
+    "CloseHandle",
+    "ConnectNamedPipe",
+    "ConvertSidToStringSidW",
+    "ConvertStringSecurityDescriptorToSecurityDescriptorW",
+    "CreateEventW",
+    "CreateFileW",
+    "CreateJobObjectW",
+    "CreateNamedPipeW",
+    "CreateProcessW",
+    "DeleteProcThreadAttributeList",
+    "DuplicateHandle",
+    "GetCurrentProcess",
+    "GetCurrentProcessId",
+    "GetCurrentThread",
+    "GetDriveTypeW",
+    "GetExitCodeProcess",
+    "GetFileInformationByHandle",
+    "GetFileType",
+    "GetFinalPathNameByHandleW",
+    "GetNamedPipeClientProcessId",
+    "GetOverlappedResult",
+    "GetProcessHeap",
+    "GetTokenInformation",
+    "HeapAlloc",
+    "HeapFree",
+    "InitializeProcThreadAttributeList",
+    "IsProcessInJob",
+    "LocalFree",
+    "OpenProcessToken",
+    "OpenThreadToken",
+    "QueryInformationJobObject",
+    "ReadFile",
+    "ResetEvent",
+    "ResumeThread",
+    "SetInformationJobObject",
+    "Sleep",
+    "TerminateJobObject",
+    "UpdateProcThreadAttribute",
+    "WaitForMultipleObjects",
+    "WaitForSingleObject"
+  ],
+  "executable": {
+    "final_path": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "size": 103192,
+    "directory": false,
+    "disk": true,
+    "stamp": [
+      1627117867,
+      3342336,
+      181195,
+      31098157,
+      2719126528
+    ],
+    "sha256": "5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+    "machine": 34404,
+    "machine_hex": "0x8664",
+    "subsystem": 3,
+    "open_access": 2147483648,
+    "share_mode": 1,
+    "write_and_delete_opens_denied": true
+  },
+  "cwd": {
+    "final_path": "C:\\Users\\josue\\jarvis",
+    "size": 8192,
+    "directory": true,
+    "disk": true,
+    "stamp": [
+      1627117867,
+      3997696,
+      20507,
+      31283247,
+      3207943823
+    ]
+  },
+  "target_v2": {
+    "compatible": true,
+    "version": "terminal-execution-target/v2",
+    "identity_matches_native": true,
+    "activation_resource_policy": "unresolved-no-activation/v1"
+  },
+  "job": {
+    "configured_flags": 8192,
+    "active_processes": 0,
+    "policy_matches_d1b": true
+  },
+  "future_child_handles": {
+    "count": 3,
+    "roles": [
+      "stdin-child",
+      "stdout-child",
+      "stderr-child"
+    ],
+    "exact_inheritable_set": true
+  },
+  "nul": {
+    "opened": true,
+    "duplicated": true
+  },
+  "pipes": {
+    "count": 2,
+    "protected_dacl": true,
+    "single_logon_sid_ace": true,
+    "ace_mask": "0x12019f",
+    "remote_clients_rejected": true,
+    "first_instance": true,
+    "max_instances": 1,
+    "noninheritable_parent_handles": true,
+    "connected_client_is_current_process": true,
+    "actual_object_security_verified": true,
+    "native_creation_observations": [
+      {
+        "name": "\\\\.\\pipe\\jarvis-terminal-cb584a63e5414fe48a20f1532c740822",
+        "open_mode": 1074266113,
+        "pipe_mode": 8,
+        "max_instances": 1
+      },
+      {
+        "name": "\\\\.\\pipe\\jarvis-terminal-2f96e30b13dd4492bfe0d61d083c02a6",
+        "open_mode": 1074266113,
+        "pipe_mode": 8,
+        "max_instances": 1
+      }
+    ]
+  },
+  "attributes": {
+    "initialized": true,
+    "handle_list_count": 3,
+    "job_list_count": 1,
+    "update_calls": 2
+  },
+  "overlapped_reads": [
+    {
+      "stream": "stdout",
+      "bytes": 28,
+      "completed": true
+    },
+    {
+      "stream": "stderr",
+      "bytes": 28,
+      "completed": true
+    }
+  ],
+  "cancel_io_ex": [
+    {
+      "stream": "stdout",
+      "final_native_observation": {
+        "api": "GetOverlappedResult",
+        "success": false,
+        "error": 995
+      },
+      "completed": true,
+      "request_was_not_completion": true
+    },
+    {
+      "stream": "stderr",
+      "final_native_observation": {
+        "api": "GetOverlappedResult",
+        "success": false,
+        "error": 995
+      },
+      "completed": true,
+      "request_was_not_completion": true
+    }
+  ],
+  "status": "PASS",
+  "failure": null,
+  "cleanup_failure": null,
+  "real_win32_apis_called": true,
+  "create_process_called": false,
+  "create_process_native_invocations": 0,
+  "tripwire_attempt_count": 3,
+  "terminal_child_launched": false,
+  "creation_receipt": {
+    "call_count": 0,
+    "classification": "P0",
+    "process_created": false,
+    "result_pending": false,
+    "process_attached": false,
+    "thread_attached": false
+  },
+  "native_call_counts": {
+    "GetCurrentProcess": 6,
+    "IsWow64Process2": 2,
+    "CreateFileW": 7,
+    "GetFileInformationByHandle": 3,
+    "GetFileType": 3,
+    "GetFinalPathNameByHandleW": 6,
+    "GetDriveTypeW": 3,
+    "ReadFile": 7,
+    "CreateJobObjectW": 1,
+    "SetInformationJobObject": 1,
+    "QueryInformationJobObject": 3,
+    "GetCurrentThread": 1,
+    "OpenThreadToken": 1,
+    "OpenProcessToken": 1,
+    "GetTokenInformation": 2,
+    "ConvertSidToStringSidW": 1,
+    "ConvertStringSecurityDescriptorToSecurityDescriptorW": 1,
+    "DuplicateHandle": 3,
+    "CreateNamedPipeW": 2,
+    "CreateEventW": 2,
+    "GetProcessHeap": 3,
+    "HeapAlloc": 3,
+    "GetHandleInformation": 14,
+    "GetSecurityDescriptorControl": 3,
+    "GetSecurityDescriptorDacl": 3,
+    "GetAce": 3,
+    "GetSecurityInfo": 2,
+    "EqualSid": 2,
+    "ResetEvent": 6,
+    "ConnectNamedPipe": 2,
+    "GetNamedPipeClientProcessId": 2,
+    "GetCurrentProcessId": 2,
+    "InitializeProcThreadAttributeList": 2,
+    "UpdateProcThreadAttribute": 2,
+    "WriteFile": 2,
+    "GetOverlappedResult": 4,
+    "CancelIoEx": 2,
+    "DeleteProcThreadAttributeList": 1,
+    "HeapFree": 3,
+    "LocalFree": 4,
+    "CloseHandle": 14,
+    "CreateProcessW": 0
+  },
+  "native_expected_error_observations": [
+    {
+      "api": "CreateFileW",
+      "last_error": 32
+    },
+    {
+      "api": "CreateFileW",
+      "last_error": 32
+    },
+    {
+      "api": "OpenThreadToken",
+      "last_error": 1008
+    },
+    {
+      "api": "ConnectNamedPipe",
+      "last_error": 535
+    },
+    {
+      "api": "ConnectNamedPipe",
+      "last_error": 535
+    },
+    {
+      "api": "InitializeProcThreadAttributeList",
+      "last_error": 122
+    },
+    {
+      "api": "ReadFile",
+      "last_error": 997
+    },
+    {
+      "api": "ReadFile",
+      "last_error": 997
+    },
+    {
+      "api": "GetOverlappedResult",
+      "last_error": 995
+    },
+    {
+      "api": "ReadFile",
+      "last_error": 997
+    },
+    {
+      "api": "ReadFile",
+      "last_error": 997
+    },
+    {
+      "api": "GetOverlappedResult",
+      "last_error": 995
+    }
+  ],
+  "native_io_observations": [
+    {
+      "api": "ReadFile",
+      "success": true,
+      "error": 0
+    },
+    {
+      "api": "ReadFile",
+      "success": true,
+      "error": 0
+    },
+    {
+      "api": "ReadFile",
+      "success": true,
+      "error": 0
+    },
+    {
+      "api": "ReadFile",
+      "success": false,
+      "error": 997
+    },
+    {
+      "api": "GetOverlappedResult",
+      "success": true,
+      "error": 0
+    },
+    {
+      "api": "ReadFile",
+      "success": false,
+      "error": 997
+    },
+    {
+      "api": "CancelIoEx",
+      "success": true,
+      "error": 0
+    },
+    {
+      "api": "GetOverlappedResult",
+      "success": false,
+      "error": 995
+    },
+    {
+      "api": "ReadFile",
+      "success": false,
+      "error": 997
+    },
+    {
+      "api": "GetOverlappedResult",
+      "success": true,
+      "error": 0
+    },
+    {
+      "api": "ReadFile",
+      "success": false,
+      "error": 997
+    },
+    {
+      "api": "CancelIoEx",
+      "success": true,
+      "error": 0
+    },
+    {
+      "api": "GetOverlappedResult",
+      "success": false,
+      "error": 995
+    }
+  ],
+  "native_locality_observations": [
+    {
+      "root": "C:\\",
+      "drive_type": 3
+    },
+    {
+      "root": "C:\\",
+      "drive_type": 3
+    },
+    {
+      "root": "C:\\",
+      "drive_type": 3
+    }
+  ],
+  "resources": [
+    {
+      "name": "root-process",
+      "state": "reserved",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": false,
+      "generation": 1,
+      "kind": "root-process"
+    },
+    {
+      "name": "primary-thread",
+      "state": "reserved",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": false,
+      "generation": 2,
+      "kind": "primary-thread"
+    },
+    {
+      "name": "executable",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 3,
+      "kind": "executable"
+    },
+    {
+      "name": "sharing-probe-write",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 4,
+      "kind": "sharing-probe-write"
+    },
+    {
+      "name": "sharing-probe-delete",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 5,
+      "kind": "sharing-probe-delete"
+    },
+    {
+      "name": "cwd",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 6,
+      "kind": "cwd"
+    },
+    {
+      "name": "job",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 7,
+      "kind": "job"
+    },
+    {
+      "name": "thread-token-check",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 8,
+      "kind": "thread-token-check"
+    },
+    {
+      "name": "process-token",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 9,
+      "kind": "process-token"
+    },
+    {
+      "name": "logon-sid-string",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 10,
+      "kind": "logon-sid-string"
+    },
+    {
+      "name": "pipe-security",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 11,
+      "kind": "pipe-security"
+    },
+    {
+      "name": "stdin-original",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 12,
+      "kind": "stdin-original"
+    },
+    {
+      "name": "stdin-child",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 13,
+      "kind": "stdin-child"
+    },
+    {
+      "name": "stdout-reader",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 14,
+      "kind": "stdout-reader"
+    },
+    {
+      "name": "stdout-original",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 15,
+      "kind": "stdout-original"
+    },
+    {
+      "name": "stdout-child",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 16,
+      "kind": "stdout-child"
+    },
+    {
+      "name": "stdout-event",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 17,
+      "kind": "stdout-event"
+    },
+    {
+      "name": "stdout-memory",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 18,
+      "kind": "stdout-memory"
+    },
+    {
+      "name": "stderr-reader",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 19,
+      "kind": "stderr-reader"
+    },
+    {
+      "name": "stderr-original",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 20,
+      "kind": "stderr-original"
+    },
+    {
+      "name": "stderr-child",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 21,
+      "kind": "stderr-child"
+    },
+    {
+      "name": "stderr-event",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 22,
+      "kind": "stderr-event"
+    },
+    {
+      "name": "stderr-memory",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 23,
+      "kind": "stderr-memory"
+    },
+    {
+      "name": "stdout-actual-security",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 24,
+      "kind": "stdout-actual-security"
+    },
+    {
+      "name": "stderr-actual-security",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 25,
+      "kind": "stderr-actual-security"
+    },
+    {
+      "name": "launch",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 26,
+      "kind": "launch"
+    },
+    {
+      "name": "attributes",
+      "state": "released",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "release_attempted": true,
+      "generation": 27,
+      "kind": "attributes"
+    }
+  ],
+  "native_acquisitions": {
+    "handles": 14,
+    "local": 4,
+    "heap": 3,
+    "attributes": 1
+  },
+  "native_releases": {
+    "attributes": 1,
+    "heap": 3,
+    "local": 4,
+    "handles": 14
+  },
+  "native_remaining": {
+    "handles": 0,
+    "heap": 0,
+    "local": 0,
+    "attributes": 0
+  },
+  "cleanup_completed": true,
+  "domain_state": "open",
+  "quarantined": false,
+  "poisoned": false,
+  "pending_io": 0,
+  "final_borrow_count": 0,
+  "ledger_released_owners": 25,
+  "ledger_unacquired_reserved_slots": 2,
+  "d2b_performed": false,
+  "proposed_d2b_target": {
+    "status": "prepared-proposal-only; no D2b authorization",
+    "target": {
+      "executable_requested": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "executable_resolved": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "executable_identity": "sha256:5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+      "argv": [
+        "-I",
+        "-S",
+        "-c",
+        "import sys; sys.stdout.write(\"D2b stdout\\n\"); sys.stderr.write(\"D2b stderr\\n\")"
+      ],
+      "cwd": "C:\\Users\\josue\\jarvis",
+      "environment": [
+        [
+          "SYSTEMROOT",
+          "C:\\WINDOWS"
+        ],
+        [
+          "WINDIR",
+          "C:\\WINDOWS"
+        ],
+        [
+          "TEMP",
+          "C:\\Users\\josue\\AppData\\Local\\Temp"
+        ],
+        [
+          "TMP",
+          "C:\\Users\\josue\\AppData\\Local\\Temp"
+        ],
+        [
+          "USERPROFILE",
+          "C:\\Users\\josue"
+        ],
+        [
+          "PATH",
+          "C;C:\\Users\\josue\\jarvis\\.venv\\Scripts;C:\\Users\\josue\\bin;C:\\Program Files\\Git\\mingw64\\bin;C:\\Program Files\\Git\\usr\\local\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\mingw64\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Users\\josue\\bin;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0;C:\\WINDOWS\\System32\\OpenSSH;C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR;C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common;C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs;C:\\Users\\josue\\AppData\\Local\\Microsoft\\WindowsApps;D:\\Microsoft VS Code\\bin;C:\\Users\\josue\\AppData\\Roaming\\npm;E:\\google cloud\\google-cloud-sdk\\bin;C:\\Program Files\\PostgreSQL\\18\\bin;C:\\Program Files\\Git\\usr\\bin\\vendor_perl;C:\\Program Files\\Git\\usr\\bin\\core_perl"
+        ],
+        [
+          "PATHEXT",
+          ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC"
+        ]
+      ],
+      "environment_identity": "sha256:c7d17c4a4395799123cd98022dd2813bd5b58d8fd2e877f9a5b02ec9a10e37b5",
+      "contract_version": "terminal-execution-target/v2",
+      "environment_policy_id": "windows-minimal/v2",
+      "timeout_seconds": 30.0,
+      "stdin_mode": "devnull",
+      "platform_contract": "windows10-11-x64-console/v1",
+      "shell": false,
+      "runtime_policy": {
+        "policy_id": "windows-bounded-runtime-contract/v1",
+        "executable_policy": "canonical-local-drive-native-console-pe/v1",
+        "supported_machines": [
+          332,
+          34404
+        ],
+        "identity_verification_policy": "held-restrictive-read-sha256/v1",
+        "serialization_policy": "windows-crt-argv/v1",
+        "command_line_utf16_limit": 30000,
+        "argv_limit": 1024,
+        "path_utf16_limit": 259,
+        "pe_header_bytes": 65536,
+        "executable_bytes_limit": 268435456,
+        "environment_transport_policy": "unicode-sorted-exact/v1",
+        "environment_utf16_limit": 32768,
+        "output_policy": "windows-prefix-64k/v1",
+        "stdout_bytes_limit": 65536,
+        "stderr_bytes_limit": 65536,
+        "read_chunk_bytes": 16384,
+        "decoding_policy": "utf8-replace/v1",
+        "cleanup_seconds": 5.0,
+        "containment_policy": "creation-time-job-kill-on-close-no-breakaway/v1",
+        "descendant_exit_policy": "terminate-and-fail-if-root-exits-first/v1",
+        "inherited_handles": [
+          "stdin-nul",
+          "stdout-writer",
+          "stderr-writer"
+        ],
+        "creation_flags": [
+          "CREATE_SUSPENDED",
+          "EXTENDED_STARTUPINFO_PRESENT",
+          "CREATE_UNICODE_ENVIRONMENT",
+          "CREATE_NO_WINDOW"
+        ],
+        "active_invocations_limit": 1,
+        "parent_io_policy": "fixed-owned-handles-two-bounded-pending-reads/v1",
+        "job_resource_policy": "unresolved-no-activation/v1",
+        "result_policy": "structured-failure-created-evidence/v1",
+        "deadline_policy": "runtime-entry-preflight-included-single-cleanup-budget/v1"
+      }
+    },
+    "approval_arguments": {
+      "contract_version": "terminal-execution-target/v2",
+      "platform_contract": "windows10-11-x64-console/v1",
+      "executable_requested": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "executable_resolved": "C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "executable_identity": "sha256:5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+      "argv": [
+        "-I",
+        "-S",
+        "-c",
+        "import sys; sys.stdout.write(\"D2b stdout\\n\"); sys.stderr.write(\"D2b stderr\\n\")"
+      ],
+      "cwd": "C:\\Users\\josue\\jarvis",
+      "environment_policy_id": "windows-minimal/v2",
+      "environment": [
+        [
+          "SYSTEMROOT",
+          "C:\\WINDOWS"
+        ],
+        [
+          "WINDIR",
+          "C:\\WINDOWS"
+        ],
+        [
+          "TEMP",
+          "C:\\Users\\josue\\AppData\\Local\\Temp"
+        ],
+        [
+          "TMP",
+          "C:\\Users\\josue\\AppData\\Local\\Temp"
+        ],
+        [
+          "USERPROFILE",
+          "C:\\Users\\josue"
+        ],
+        [
+          "PATH",
+          "C;C:\\Users\\josue\\jarvis\\.venv\\Scripts;C:\\Users\\josue\\bin;C:\\Program Files\\Git\\mingw64\\bin;C:\\Program Files\\Git\\usr\\local\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\mingw64\\bin;C:\\Program Files\\Git\\usr\\bin;C:\\Users\\josue\\bin;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0;C:\\WINDOWS\\System32\\OpenSSH;C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR;C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common;C:\\Program Files\\Git\\cmd;C:\\Program Files\\nodejs;C:\\Users\\josue\\AppData\\Local\\Microsoft\\WindowsApps;D:\\Microsoft VS Code\\bin;C:\\Users\\josue\\AppData\\Roaming\\npm;E:\\google cloud\\google-cloud-sdk\\bin;C:\\Program Files\\PostgreSQL\\18\\bin;C:\\Program Files\\Git\\usr\\bin\\vendor_perl;C:\\Program Files\\Git\\usr\\bin\\core_perl"
+        ],
+        [
+          "PATHEXT",
+          ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC"
+        ]
+      ],
+      "environment_identity": "sha256:c7d17c4a4395799123cd98022dd2813bd5b58d8fd2e877f9a5b02ec9a10e37b5",
+      "timeout_seconds": 30.0,
+      "stdin_mode": "devnull",
+      "shell": false,
+      "runtime_policy": {
+        "policy_id": "windows-bounded-runtime-contract/v1",
+        "executable_policy": "canonical-local-drive-native-console-pe/v1",
+        "supported_machines": [
+          332,
+          34404
+        ],
+        "identity_verification_policy": "held-restrictive-read-sha256/v1",
+        "serialization_policy": "windows-crt-argv/v1",
+        "command_line_utf16_limit": 30000,
+        "argv_limit": 1024,
+        "path_utf16_limit": 259,
+        "pe_header_bytes": 65536,
+        "executable_bytes_limit": 268435456,
+        "environment_transport_policy": "unicode-sorted-exact/v1",
+        "environment_utf16_limit": 32768,
+        "output_policy": "windows-prefix-64k/v1",
+        "stdout_bytes_limit": 65536,
+        "stderr_bytes_limit": 65536,
+        "read_chunk_bytes": 16384,
+        "decoding_policy": "utf8-replace/v1",
+        "cleanup_seconds": 5.0,
+        "containment_policy": "creation-time-job-kill-on-close-no-breakaway/v1",
+        "descendant_exit_policy": "terminate-and-fail-if-root-exits-first/v1",
+        "inherited_handles": [
+          "stdin-nul",
+          "stdout-writer",
+          "stderr-writer"
+        ],
+        "creation_flags": [
+          "CREATE_SUSPENDED",
+          "EXTENDED_STARTUPINFO_PRESENT",
+          "CREATE_UNICODE_ENVIRONMENT",
+          "CREATE_NO_WINDOW"
+        ],
+        "active_invocations_limit": 1,
+        "parent_io_policy": "fixed-owned-handles-two-bounded-pending-reads/v1",
+        "job_resource_policy": "unresolved-no-activation/v1",
+        "result_policy": "structured-failure-created-evidence/v1",
+        "deadline_policy": "runtime-entry-preflight-included-single-cleanup-budget/v1"
+      }
+    },
+    "expected_exit_code": 0,
+    "expected_stdout": "D2b stdout\n",
+    "expected_stderr": "D2b stderr\n",
+    "limitations": "D2a does not validate child creation, resume, containment, or process capture; production resource policy remains unresolved-no-activation/v1"
+  },
+  "owner_thread": {
+    "explicit_non_main": true,
+    "daemon": false,
+    "joined": true,
+    "exception_propagation": "captured owner failure is raised on main after join and saved STOP evidence"
+  },
+  "child_creation_guards": {
+    "installed_before_optional_imports": true,
+    "python_launcher_attempts": {},
+    "child_audit_events": [],
+    "platform_api_attempts": [],
+    "real_platform_module_loaded_at_start": false,
+    "real_subprocess_module_loaded_at_start": false
+  },
+  "platform_module_used": false,
+  "platform_api_calls": 0,
+  "subprocess_module_invoked": false,
+  "real_subprocess_module_imported": false,
+  "real_platform_module_imported": false,
+  "helper_child_count": 0,
+  "terminal_child_count": 0,
+  "diagnostic_external_executable_calls": 0,
+  "guards_remained_installed": true,
+  "end_utc_epoch": 1791582904.9918344,
+  "zero_child_proof": {
+    "result": true,
+    "basis": "first-action audit hook; non-forwarding Python launch guards including _winapi.CreateProcess; forbidden-module sentinels; guarded native DLL loaders and three exercised CreateProcessW tripwires; static no-launcher harness path",
+    "ordinary_suite_excluded": true,
+    "external_command_runner_excluded": true
+  },
+  "d2b_readiness": "eligible for separate authorization; not authorized or performed"
+}

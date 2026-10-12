@@ -1,0 +1,61 @@
+{
+  "phase": "D1G-D2a",
+  "live_backend_constructed": false,
+  "create_process_resolved": false,
+  "status": "STOP",
+  "failure": "Traceback (most recent call last):\n  File \"C:\\Users\\josue\\jarvis\\scripts\\live_d1g_d2a_diagnostics.py\", line 209, in run_diagnostics\n    T._validate_windows_host()\n  File \"C:\\Users\\josue\\jarvis\\capabilities\\terminal.py\", line 691, in _validate_windows_host\n    or platform.machine().upper() not in {\"AMD64\", \"X86_64\"}\n       ^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\platform.py\", line 958, in machine\n    return uname().machine\n           ^^^^^^^\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\platform.py\", line 856, in uname\n    release, version, csd, ptype = win32_ver()\n                                   ^^^^^^^^^^^\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\platform.py\", line 371, in win32_ver\n    major, minor, build = map(int, _syscmd_ver()[2].split('.'))\n                                   ^^^^^^^^^^^^^\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\platform.py\", line 284, in _syscmd_ver\n    info = subprocess.check_output(cmd,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\subprocess.py\", line 466, in check_output\n    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\subprocess.py\", line 548, in run\n    with Popen(*popenargs, **kwargs) as process:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\subprocess.py\", line 1026, in __init__\n    self._execute_child(args, executable, preexec_fn, close_fds,\n  File \"C:\\Users\\josue\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\subprocess.py\", line 1534, in _execute_child\n    sys.audit(\"subprocess.Popen\", executable, args, cwd, env)\n  File \"C:\\Users\\josue\\jarvis\\scripts\\live_d1g_d2a_diagnostics.py\", line 53, in prohibit_children\n    raise CreationForbidden(\"D2a forbids child-process substitutes\")\nCreationForbidden: D2a forbids child-process substitutes\n",
+  "cleanup_failure": null,
+  "real_win32_apis_called": false,
+  "create_process_called": false,
+  "create_process_native_invocations": 0,
+  "tripwire_attempt_count": 0,
+  "terminal_child_launched": false,
+  "creation_receipt": {
+    "call_count": 0,
+    "classification": "P0",
+    "process_created": false,
+    "result_pending": false,
+    "process_attached": false,
+    "thread_attached": false
+  },
+  "native_call_counts": {},
+  "native_expected_error_observations": [],
+  "resources": [
+    {
+      "name": "root-process",
+      "state": "reserved",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000024A8CDD4FF0>",
+        "generation": 1,
+        "kind": "root-process"
+      },
+      "release_attempted": false
+    },
+    {
+      "name": "primary-thread",
+      "state": "reserved",
+      "borrowers": 0,
+      "pending_operations": 0,
+      "identity": {
+        "domain": "<object object at 0x0000024A8CDD4FD0>",
+        "generation": 2,
+        "kind": "primary-thread"
+      },
+      "release_attempted": false
+    }
+  ],
+  "native_acquisitions": {},
+  "native_releases": {},
+  "native_remaining": {
+    "handles": 0,
+    "heap": 0,
+    "local": 0,
+    "attributes": 0
+  },
+  "cleanup_completed": true,
+  "domain_state": "open",
+  "quarantined": false,
+  "d2b_performed": false
+}

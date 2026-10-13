@@ -1,0 +1,525 @@
+{
+  "phase": "D1G-D2B2-R2-FIX",
+  "status": "PASS_NONSPAWNING",
+  "timestamp": "2026-10-13T14:05:40.886Z",
+  "base": {
+    "branch": "main",
+    "HEAD": "18076ec1d02ad5d467129401c38763bf224750b3",
+    "origin_main": "18076ec1d02ad5d467129401c38763bf224750b3"
+  },
+  "changed_files_this_phase": [
+    "capabilities/terminal_runtime.py",
+    "tests/test_terminal_process_evidence_validators.py",
+    "diagnostics/d2b2_r2_fix/"
+  ],
+  "corrections": {
+    "liveness": "Reject every non-UNKNOWN liveness state without handle_acquired, including known_root labels; preserve unknown and explicit query failures.",
+    "path": "Require nonempty UNC server/share/executable and every intervening component. Recognize extended UNC separately; preserve drive-absolute and extended drive/volume-GUID file paths. No normalization or authority grant."
+  },
+  "regression_cases": 54,
+  "source_hashes": {
+    "capabilities/terminal_runtime.py": "66cee695bf6c484d0e6903e24693f5d216b54b813d14dbd2ff5762f82f9cbaa3",
+    "capabilities/terminal_win32.py": "8a448b4a970e48b6d893dbb7f84356eff9f4f63ecae41992573fd70cfa72664f",
+    "capabilities/terminal_runtime_policy.md": "d5a9453593adb9c3739dfdedceadddbe4125fe3717b9692138570e096eb18512",
+    "tests/terminal_runtime_fakes.py": "b81e55fd7cc4a56a1f5570bee3ecf21aa2aa53a9b789123a30d1dc22aa269c6a",
+    "tests/terminal_win32_fakes.py": "dbed486ab1151e1bd4b5f60fda186a87e4aedf28adffc47ccac959a62377dbda",
+    "tests/test_terminal_root_job_evidence.py": "7ea8b736be3fddd45f0a965d7e774a46bce40ae6a5f5fe352485648ef56acdba",
+    "tests/test_terminal_win32_contract.py": "3cde9e41e8e3c33640987b306651dc585cd6eab5bb3b6697029a3e32d0e265a5",
+    "tests/test_terminal_process_attestation.py": "c79b7b804642ded5f5fda1f7c738425969a3473ab69608fd3329ab4cff7f8a5e",
+    "tests/test_terminal_process_evidence_validators.py": "9c2ce3bc007103386eecacf96efa297299795c7b00948cd2d90909fb9b485e4e",
+    "scripts/run_r2_nonspawning_tests.py": "759a45ed7997143441a5130e30035519056b47f0c78c664730bb7d210979bd0c",
+    "scripts/run_d2b2_nonspawning_tests.py": "3825c09328bbbe4cd3175c493249d4df61b784fc9c9c3a0bce3ef5cee197d199"
+  },
+  "preservation": {
+    "historical_25_unchanged": true,
+    "original_r2_12_unchanged": true,
+    "files": [
+      {
+        "path": "diagnostics/d2b2/guarded_focused.json",
+        "sha256": "27a197b29b50d207837f2c00380057347504410b807c576e5777540ead46b2c6",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/guarded_focused_initial_failure.json",
+        "sha256": "593792b8f427f84a4dac9156ce9cdd5bb67f015a0f3a4170ed869f7429725a62",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/guarded_focused_initial_failure.log",
+        "sha256": "cfd44e7598df15553e9511bc71b56972aeb629a3a1dbac27f91fe92a8f151dc5",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/guarded_focused_initial_failure_host.log",
+        "sha256": "cfd44e7598df15553e9511bc71b56972aeb629a3a1dbac27f91fe92a8f151dc5",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/guarded_full.json",
+        "sha256": "39469c6f854d7676297feb91966c5e15349a635532492d49e1db5bdbe9bc7ec8",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/guarded_full.log",
+        "sha256": "0ae5b0933e1de2c3d78da229e2c0d794acd7367ecbf73cd6671c645c5ebe4124",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/live_host.log",
+        "sha256": "0de35acb10854c08646d46b21756f034de90b9fba125074ae6b07ad7ac8069ca",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/ordinary_full.json",
+        "sha256": "f8f55840c487a866f64d507baacacf1864809a32f78af1cee856c9a0be952915",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/ordinary_full.log",
+        "sha256": "46d39e0616b96758ac72729706d3f99657ef35ec626b2c1787271665ad9f7b13",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/post_live_guarded_full.json",
+        "sha256": "5a6d35c3fee47ea3f17a4ad2ad7e33731b28e3c340da362d9c3d8e45fe29e6ca",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/post_live_guarded_full.log",
+        "sha256": "89aa72064ff1a4e65852bd8edb068654b6eecbd00209e6d0bb45a706deb26275",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/preparation_stop.json",
+        "sha256": "f1592fdb2cbe2570712d0e62807d0a5e9c295ec9913c33eac33ba1f522efb9ae",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/pre_live_gates.json",
+        "sha256": "3b818b3f611ef66089968d5335437870e811def77d8dfc52271444456d842f33",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/README.md",
+        "sha256": "b2b531124718d4fd18a6cda3caaeddb32fd9a6685c3602004374f8b00c9386d9",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/result.json",
+        "sha256": "6ec37ecfc1920f5697d6ef922938c0f5e6b45bcb51306d9aa7f1ab960b7de9c2",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/single_attempt_reserved.json",
+        "sha256": "d7cd796263b29bfb4e63759edd5033fccc46820315205f65a45f149fa8006828",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2/validation.json",
+        "sha256": "c3dede8e025d8e8662d9c8a1d19de67323ade50b8693f6021eaaccf044a7744f",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b/README.md",
+        "sha256": "6947dedb82677571c0fd483808ef931e3d83158f3cc8613facd59e96f22390bf",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b/result.json",
+        "sha256": "af5b98f1971ca0f66d0808773e4aed787910fead65067308830ad39d2a120cdc",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b/single_attempt_reserved.json",
+        "sha256": "8531e51bbbba0e2fccec9cb44528b99eb6e05acf4ea72d0545aafe5d4da96ba0",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b/validation.json",
+        "sha256": "c1bb5d263870251dcef6e50e724bbd38fa42fa690a6c633724c67c6afdad8e95",
+        "matches": true
+      },
+      {
+        "path": "scripts/d2b2_contract.py",
+        "sha256": "45e25303ea487dbd79f0b4b4b97bac3035347beb5d3143a162c6ce4a6ffb6f21",
+        "matches": true
+      },
+      {
+        "path": "scripts/live_d1g_d2b2_second_child.py",
+        "sha256": "99158b0b7f0aa5d5e395879eaa68c705fbaca2c347e29e51e9fcc548247fbe1f",
+        "matches": true
+      },
+      {
+        "path": "scripts/run_d2b2_nonspawning_tests.py",
+        "sha256": "3825c09328bbbe4cd3175c493249d4df61b784fc9c9c3a0bce3ef5cee197d199",
+        "matches": true
+      },
+      {
+        "path": "tests/test_d2b2_diagnostic_contract.py",
+        "sha256": "e94de408acc6243a7fe3312420cba0ef3fff79df0dcede1e6a9b6e5c9766f847",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/attestation_initial.json",
+        "sha256": "0871eef3602a328644aa0975a16d60d882887e692b28c81d901d6834a63d68ad",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/attestation_initial.log",
+        "sha256": "1cc62240b3bbf84512af2a481dd47cdeb0a1a4fca3d732720359d679f4eac643",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/guarded_focused.json",
+        "sha256": "a775d41ef35de249b8ccd4dffcc4740cf7705b461e79a7ba750d29409c4deea3",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/guarded_focused.log",
+        "sha256": "8d0e703400b315729b604d05036b244bf92473d8358bda67a710370b54d3ac4f",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/guarded_full.json",
+        "sha256": "10b86938fd9c330dcbfc48c69a496760a9b4149f8d947e71677de038d194a1d5",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/guarded_full.log",
+        "sha256": "5d8b41841d0b307e8250c3fa95f585044fb2ad9d8dee2828d5944e1e0cdc53b9",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/initial_focused.json",
+        "sha256": "14b7d5bd91ec325ca65ea0c09b4ccf23525b80b78348e92c0ac3d529eedbb9fe",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/initial_focused.log",
+        "sha256": "a40e7ce867720f3c4fc4f1060c5b12203865986028d707470f706f132f1594e0",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/ordinary_full.json",
+        "sha256": "3a30b00f9aa58e32bcb9b16d35fb4cbae2e2afb6781db23c16ab8df9a5185110",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/ordinary_full.log",
+        "sha256": "f737fa67c7a568ca0866f121c0679141b3abc8dbd5457909c636763e3859ae65",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/README.md",
+        "sha256": "b4129fea347b5ee834f4bfdba63340a1379f6795f63b80b74d807331ad5c47ab",
+        "matches": true
+      },
+      {
+        "path": "diagnostics/d2b2_r2/validation.json",
+        "sha256": "60a66dcfa25b0954032cfc03633ad107d889df69c7c7ec1cf53fcfbe3d3f09d0",
+        "matches": true
+      }
+    ]
+  },
+  "runs": {
+    "reproduction_before": {
+      "name": "reproduction_before",
+      "executable": "C:/Users/josue/AppData/Local/Programs/Python/Python311/python.exe",
+      "argv": [
+        "-I",
+        "-S",
+        "-B",
+        "scripts/run_r2_nonspawning_tests.py",
+        "--report",
+        "diagnostics/d2b2_r2_fix/reproduction_before.json",
+        "--",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_terminal_process_evidence_validators.py",
+        "-k",
+        "original_"
+      ],
+      "started": "2026-10-13T14:01:35.056Z",
+      "finished": "2026-10-13T14:01:35.975Z",
+      "exit_code": 1,
+      "report_sha256": "f98b1aa35770a00fc5f52f7129e8dc03895bd2ec01c00a27134c97875a419f3b",
+      "log_sha256": "ee12e6ded896e1446025f890e8cbeaa8f739b9cd507edfd15099707fa8d570c4",
+      "report": {
+        "phase": "D1G-D2B-R2",
+        "pytest_exit_code": 1,
+        "collected": 3,
+        "results": {
+          "passed": 0,
+          "failed": 3,
+          "skipped": 0
+        },
+        "seconds": 0.35900000005494803,
+        "blocked_process_events": {
+          "audit_events": [],
+          "launch_api_attempts": [],
+          "native_symbol_attempts": []
+        },
+        "winapi_launch_guard_retained": true,
+        "no_live_launch_evidence": true,
+        "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+        "historical_live_harness_invoked": false
+      }
+    },
+    "reproduction_after": {
+      "name": "reproduction_after",
+      "executable": "C:/Users/josue/AppData/Local/Programs/Python/Python311/python.exe",
+      "argv": [
+        "-I",
+        "-S",
+        "-B",
+        "scripts/run_r2_nonspawning_tests.py",
+        "--report",
+        "diagnostics/d2b2_r2_fix/reproduction_after.json",
+        "--",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_terminal_process_evidence_validators.py",
+        "-k",
+        "original_"
+      ],
+      "started": "2026-10-13T14:02:27.958Z",
+      "finished": "2026-10-13T14:02:28.759Z",
+      "exit_code": 0,
+      "report_sha256": "263141fff7ed407b73019a4ceaca17252a95c75e8d8e3f556a319367ad5e37c5",
+      "log_sha256": "bc2039ca326fdbe7e1b7da43e01473e01ed10a163f49a534939554b1eb122d8e",
+      "report": {
+        "phase": "D1G-D2B-R2",
+        "pytest_exit_code": 0,
+        "collected": 3,
+        "results": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0
+        },
+        "seconds": 0.2190000000409782,
+        "blocked_process_events": {
+          "audit_events": [],
+          "launch_api_attempts": [],
+          "native_symbol_attempts": []
+        },
+        "winapi_launch_guard_retained": true,
+        "no_live_launch_evidence": true,
+        "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+        "historical_live_harness_invoked": false
+      }
+    },
+    "focused": {
+      "name": "focused",
+      "executable": "C:/Users/josue/AppData/Local/Programs/Python/Python311/python.exe",
+      "argv": [
+        "-I",
+        "-S",
+        "-B",
+        "scripts/run_r2_nonspawning_tests.py",
+        "--report",
+        "diagnostics/d2b2_r2_fix/focused.json",
+        "--",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_terminal_process_evidence_validators.py",
+        "tests/test_terminal_process_attestation.py"
+      ],
+      "started": "2026-10-13T14:02:28.759Z",
+      "finished": "2026-10-13T14:02:29.859Z",
+      "exit_code": 0,
+      "report_sha256": "f799b86e24d6379b653db28af0a814c7499ae260e2fb83d33d3e769b47b7dbed",
+      "log_sha256": "cfb55e62b645a31111b694cf924004c80e29c100dd8944aa1cbeb3dd4fb289d1",
+      "report": {
+        "phase": "D1G-D2B-R2",
+        "pytest_exit_code": 0,
+        "collected": 86,
+        "results": {
+          "passed": 86,
+          "failed": 0,
+          "skipped": 0
+        },
+        "seconds": 0.5939999999245629,
+        "blocked_process_events": {
+          "audit_events": [],
+          "launch_api_attempts": [],
+          "native_symbol_attempts": []
+        },
+        "winapi_launch_guard_retained": true,
+        "no_live_launch_evidence": true,
+        "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+        "historical_live_harness_invoked": false
+      }
+    },
+    "focused_final": {
+      "name": "focused_final",
+      "executable": "C:/Users/josue/AppData/Local/Programs/Python/Python311/python.exe",
+      "argv": [
+        "-I",
+        "-S",
+        "-B",
+        "scripts/run_r2_nonspawning_tests.py",
+        "--report",
+        "diagnostics/d2b2_r2_fix/focused_final.json",
+        "--",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_terminal_process_evidence_validators.py",
+        "tests/test_terminal_process_attestation.py"
+      ],
+      "started": "2026-10-13T14:03:18.230Z",
+      "finished": "2026-10-13T14:03:19.436Z",
+      "exit_code": 0,
+      "report_sha256": "2eea4afbff79eacfc490c798446715ac30c12db32f1d0fdb1b411a2dbc47ae79",
+      "log_sha256": "fcd7840ad57e60851894373f7c27ab1d126b856c6dbd6c954641231495918bf5",
+      "report": {
+        "phase": "D1G-D2B-R2",
+        "pytest_exit_code": 0,
+        "collected": 95,
+        "results": {
+          "passed": 95,
+          "failed": 0,
+          "skipped": 0
+        },
+        "seconds": 0.6400000000139698,
+        "blocked_process_events": {
+          "audit_events": [],
+          "launch_api_attempts": [],
+          "native_symbol_attempts": []
+        },
+        "winapi_launch_guard_retained": true,
+        "no_live_launch_evidence": true,
+        "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+        "historical_live_harness_invoked": false
+      }
+    },
+    "ordinary_full": {
+      "name": "ordinary_full",
+      "executable": "C:/Users/josue/AppData/Local/Programs/Python/Python311/python.exe",
+      "argv": [
+        "-I",
+        "-S",
+        "-B",
+        "scripts/run_d2b2_nonspawning_tests.py",
+        "--ordinary",
+        "--report",
+        "diagnostics/d2b2_r2_fix/ordinary_full.json",
+        "--",
+        "-q",
+        "-p",
+        "no:cacheprovider"
+      ],
+      "started": "2026-10-13T14:03:19.437Z",
+      "finished": "2026-10-13T14:03:33.140Z",
+      "exit_code": 0,
+      "report_sha256": "a7829b0af867027552ae58e01f7f08d6b994d3b490d5018d767a0df5703c9d5a",
+      "log_sha256": "8b0861625db5e02fc7fa598634a166df91a07536b713b42d705053d15a483d0d",
+      "report": {
+        "phase": "D1G-D2B2",
+        "mode": "ordinary-launch-guarded",
+        "pytest_exit_code": 0,
+        "collected": 1740,
+        "results": {
+          "passed": 1740,
+          "failed": 0,
+          "skipped": 0
+        },
+        "seconds": 13.030999999959022,
+        "blocked_process_events": {
+          "audit_events": [],
+          "launch_api_attempts": [],
+          "native_symbol_attempts": []
+        },
+        "winapi_launch_guard_retained": true,
+        "no_live_launch_evidence": true,
+        "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+        "historical_live_harness_invoked": false
+      }
+    },
+    "guarded_full": {
+      "name": "guarded_full",
+      "executable": "C:/Users/josue/AppData/Local/Programs/Python/Python311/python.exe",
+      "argv": [
+        "-I",
+        "-S",
+        "-B",
+        "scripts/run_r2_nonspawning_tests.py",
+        "--report",
+        "diagnostics/d2b2_r2_fix/guarded_full.json",
+        "--",
+        "-q",
+        "-p",
+        "no:cacheprovider"
+      ],
+      "started": "2026-10-13T14:04:12.788Z",
+      "finished": "2026-10-13T14:04:26.617Z",
+      "exit_code": 0,
+      "report_sha256": "7e90219b65cd4fe499e89230dc76f9a718bf4583dece69b782976a5a53010338",
+      "log_sha256": "6b6bd1af8663822249560fbf8fa33e8426c58b57ac5dff8c78b609ce28778723",
+      "report": {
+        "phase": "D1G-D2B-R2",
+        "pytest_exit_code": 0,
+        "collected": 1740,
+        "results": {
+          "passed": 1740,
+          "failed": 0,
+          "skipped": 0
+        },
+        "seconds": 12.952999999979511,
+        "blocked_process_events": {
+          "audit_events": [],
+          "launch_api_attempts": [],
+          "native_symbol_attempts": []
+        },
+        "winapi_launch_guard_retained": true,
+        "no_live_launch_evidence": true,
+        "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+        "historical_live_harness_invoked": false
+      }
+    }
+  },
+  "runner_usage": "Documented -I -S -B and --report; ordinary mode --ordinary, full guarded mode blocks live bindings; plugin autoload disabled; cacheprovider disabled. Existing runners unchanged and not bypassed.",
+  "runner_report_label_note": "Producer phase labels are historical D1G-D2B-R2 / D1G-D2B2. This aggregate identifies D1G-D2B2-R2-FIX and binds each exact command/report/log hash.",
+  "unchanged": {
+    "runtime_outside_two_validators": true,
+    "ledger": true,
+    "P1_native_creation": true,
+    "native_backend": true,
+    "containment_policy": true,
+    "target_v2": true,
+    "protected_authority": true,
+    "approval_semantics": true,
+    "production_registration": true,
+    "creation_flags": true
+  },
+  "execution_scope": {
+    "real_terminal_children": 0,
+    "live_CreateProcessW": 0,
+    "live_ResumeThread": 0,
+    "live_TerminateJobObject": 0,
+    "historical_live_harness_invoked": false,
+    "real_native_attestation": false,
+    "production_terminal": "OFF",
+    "direct_tool_side_test_hosts_excluded_from_terminal_children": true
+  },
+  "git": {
+    "before": " M capabilities/terminal_runtime.py\n M capabilities/terminal_runtime_policy.md\n M capabilities/terminal_win32.py\n M tests/terminal_runtime_fakes.py\n M tests/terminal_win32_fakes.py\n M tests/test_terminal_root_job_evidence.py\n M tests/test_terminal_win32_contract.py\n?? diagnostics/d2b2/\n?? diagnostics/d2b2_r2/\n?? scripts/d2b2_contract.py\n?? scripts/live_d1g_d2b2_second_child.py\n?? scripts/run_d2b2_nonspawning_tests.py\n?? tests/test_d2b2_diagnostic_contract.py\n?? tests/test_terminal_process_attestation.py\n",
+    "after": " M capabilities/terminal_runtime.py\n M capabilities/terminal_runtime_policy.md\n M capabilities/terminal_win32.py\n M tests/terminal_runtime_fakes.py\n M tests/terminal_win32_fakes.py\n M tests/test_terminal_root_job_evidence.py\n M tests/test_terminal_win32_contract.py\n?? diagnostics/d2b2/\n?? diagnostics/d2b2_r2/\n?? diagnostics/d2b2_r2_fix/\n?? scripts/d2b2_contract.py\n?? scripts/live_d1g_d2b2_second_child.py\n?? scripts/run_d2b2_nonspawning_tests.py\n?? tests/test_d2b2_diagnostic_contract.py\n?? tests/test_terminal_process_attestation.py\n?? tests/test_terminal_process_evidence_validators.py\n",
+    "index_sha256": "bc305e5bde23f12d205c64e847e7b55c537ba8d763ef1fe8a2c0fefd5e6cdf6b",
+    "index_unchanged": true,
+    "staged_diff_empty": true,
+    "diff_check_passed": true,
+    "staged": false,
+    "committed": false,
+    "pushed": false
+  },
+  "limitations": [
+    "Pure and in-memory native-fake validation only; no live native compatibility claim.",
+    "Historical PID 5888 provenance remains unknown.",
+    "Snapshot-to-open continuity remains unproven; parent PID remains deferred.",
+    "Image format validation proves neither trust nor expected OS role."
+  ]
+}

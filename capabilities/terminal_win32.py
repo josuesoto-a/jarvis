@@ -19,6 +19,9 @@ from capabilities.terminal_runtime import (
     BackendResourceScope, CreationReceipt, FileEvidence, ReadResult,
     StdioResources, StreamResources, TerminalLifecycleError,
     JobPidSnapshot, JobPidQueryIssue, JOB_PID_OBSERVATION_CAPACITY,
+    NON_ROOT_OBSERVATION_CAPACITY, PROCESS_IMAGE_UTF16_CAPACITY,
+    NonRootProcessEvidence, ProcessObservationIssue, ProcessIdentityIssue, ProcessLiveness,
+    InvocationPhase, CleanupReason, full_process_image_path,
 )
 
 BOOL = C.c_int32
@@ -168,6 +171,8 @@ JobObjectBasicAccountingInformation = 1
 JobObjectBasicProcessIdList = 3
 ERROR_MORE_DATA = 234
 JobObjectExtendedLimitInformation = 9
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+OBSERVATION_PROCESS_ACCESS = PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE
 TOKEN_QUERY = 8
 TokenGroups = 2
 SE_GROUP_LOGON_ID = 0xC0000000
@@ -191,6 +196,10 @@ READ_BYTES = 16384
 # stay opaque: only Windows computes their size and initializes their storage.
 _P = C.POINTER
 API_SIGNATURES = {
+    "OpenProcess": (HANDLE, [DWORD, BOOL, DWORD]),
+    "GetProcessId": (DWORD, [HANDLE]),
+    "QueryFullProcessImageNameW": (BOOL, [HANDLE, DWORD, LPWSTR, _P(DWORD)]),
+    "GetProcessTimes": (BOOL, [HANDLE, _P(FILETIME), _P(FILETIME), _P(FILETIME), _P(FILETIME)]),
     "CreateFileW": (HANDLE, [LPCWSTR, DWORD, DWORD, _P(SECURITY_ATTRIBUTES), DWORD, DWORD, HANDLE]),
     "GetFileType": (DWORD, [HANDLE]),
     "GetFileInformationByHandle": (BOOL, [HANDLE, _P(BY_HANDLE_FILE_INFORMATION)]),
@@ -645,6 +654,157 @@ class Win32TerminalBackend:
         token._allocation_pending = False
         if not token._address:
             raise TerminalLifecycleError("native allocation failed")
+
+
+    def prepare_observation_handles(self, scope):
+        self._check()
+        with scope.invocation.resources.borrow(scope.invocation.resources.resource("job")) as lease:
+            known_job = lease.payload
+            self._check(known_job)
+        owners = []
+        for index in range(NON_ROOT_OBSERVATION_CAPACITY):
+            token = _Handle(self)
+            token._observation_invocation = scope.invocation
+            token._observation_job = known_job
+            owners.append(scope.own("process-observation-" + str(index), token))
+        return tuple(owners)
+
+    def observe_process(self, observation, job, pid, sequence, previous_generation,
+                        now, deadline, permitted):
+        self._check(observation)
+        self._check(job)
+        invocation = getattr(observation, "_observation_invocation", None)
+        current = None if invocation is None else invocation.snapshot()
+        if (type(observation) is not _Handle or observation._attempted or observation._closed
+                or current is None or current.phase is not InvocationPhase.CLEANING
+                or not current.creation.process_created or current.creation.result_pending
+                or not current.creation.adoption_complete or current.creation.root_pid is None
+                or job is not getattr(observation, "_observation_job", None) or not current.process_exited
+                or current.cleanup_reason is not CleanupReason.ROOT_EXIT
+                or pid == current.creation.root_pid):
+            raise TerminalLifecycleError("process observation lacks known P1/prebound owner")
+        if type(pid) is not int or not 0 < pid <= 0xFFFFFFFF:
+            raise ValueError("valid observational PID required")
+        started = now()
+        facts = {}
+        issues = [ProcessObservationIssue(ProcessIdentityIssue.SNAPSHOT_LINK_UNPROVEN,
+                                           "snapshot_to_open")]
+        acquired = False
+        halted = False
+        def issue(kind, stage, error=None):
+            issues.append(ProcessObservationIssue(kind, stage, error))
+        def ready(stage):
+            nonlocal halted
+            if halted:
+                return False
+            if now() >= deadline or not permitted():
+                issue(ProcessIdentityIssue.OBSERVATION_STOPPED, stage)
+                halted = True
+                return False
+            return True
+        def query(kind, stage, function):
+            nonlocal halted
+            if not ready(stage):
+                return None
+            try:
+                result = function()
+                if result is None:
+                    issue(kind, stage)
+                return result
+            except BaseException:
+                issue(kind, stage)
+                halted = True
+                return None
+        if ready("open_process"):
+            observation._attempted = True
+            try:
+                raw = self._api.OpenProcess(OBSERVATION_PROCESS_ACCESS, False, pid)
+            except BaseException:
+                # No output/handle use: unresolved acquisition belongs to its prebound owner.
+                issue(ProcessIdentityIssue.OPEN_OUTCOME_UNCERTAIN, "open_process")
+            else:
+                observation._value = raw
+                observation._resolved = raw != INVALID_HANDLE_VALUE
+                observation._acquired = raw not in {None, 0, INVALID_HANDLE_VALUE}
+                acquired = observation._acquired
+                if raw == INVALID_HANDLE_VALUE:
+                    issue(ProcessIdentityIssue.OPEN_OUTCOME_UNCERTAIN, "open_process")
+                elif not acquired:
+                    issue(ProcessIdentityIssue.OPEN_PROCESS_FAILED, "open_process", self._api.last_error())
+        if acquired:
+            handle = observation._raw()
+            confirmed = query(ProcessIdentityIssue.PID_QUERY_FAILED, "confirm_pid",
+                              lambda: self._api.GetProcessId(handle))
+            if confirmed is not None:
+                if type(confirmed) is not int:
+                    issue(ProcessIdentityIssue.PID_QUERY_FAILED, "confirm_pid")
+                elif confirmed == 0:
+                    issue(ProcessIdentityIssue.PID_QUERY_FAILED, "confirm_pid", self._api.last_error())
+                elif not 0 < confirmed <= 0xFFFFFFFF:
+                    issue(ProcessIdentityIssue.PID_QUERY_FAILED, "confirm_pid")
+                else:
+                    facts["confirmed_pid"] = int(confirmed)
+                    if confirmed != pid:
+                        issue(ProcessIdentityIssue.PID_MISMATCH, "confirm_pid")
+                        facts["snapshot_link"] = "mismatch"
+            if facts.get("confirmed_pid") == pid:
+                image = (WCHAR * PROCESS_IMAGE_UTF16_CAPACITY)()
+                units = DWORD(PROCESS_IMAGE_UTF16_CAPACITY)
+                success = query(ProcessIdentityIssue.IMAGE_QUERY_FAILED, "image_path",
+                    lambda: self._api.QueryFullProcessImageNameW(handle, 0, image, C.byref(units)))
+                if success is not None:
+                    if not success:
+                        error = self._api.last_error()
+                        issue(ProcessIdentityIssue.IMAGE_BUFFER_EXHAUSTED
+                              if error == ERROR_INSUFFICIENT_BUFFER else ProcessIdentityIssue.IMAGE_QUERY_FAILED,
+                              "image_path", error)
+                    elif not 0 < units.value < PROCESS_IMAGE_UTF16_CAPACITY:
+                        issue(ProcessIdentityIssue.IMAGE_BUFFER_EXHAUSTED, "image_path")
+                    else:
+                        try:
+                            path = _decode_utf16(image, units.value)
+                            if "\0" in path or image[units.value] != 0 or not full_process_image_path(path):
+                                raise ValueError("incomplete full image output")
+                            facts["image_path"] = path
+                        except (UnicodeError, ValueError):
+                            issue(ProcessIdentityIssue.IMAGE_QUERY_FAILED, "image_path")
+                created, exited, kernel, user = FILETIME(), FILETIME(), FILETIME(), FILETIME()
+                success = query(ProcessIdentityIssue.PROCESS_TIMES_FAILED, "creation_time",
+                    lambda: self._api.GetProcessTimes(handle, C.byref(created), C.byref(exited),
+                                                     C.byref(kernel), C.byref(user)))
+                if success is not None:
+                    if success:
+                        generation = (int(created.dwHighDateTime) << 32) | int(created.dwLowDateTime)
+                        if generation == 0:
+                            issue(ProcessIdentityIssue.PROCESS_TIMES_FAILED, "creation_time")
+                        else:
+                            facts["creation_time"] = generation
+                        if generation != 0 and previous_generation is not None and generation != previous_generation:
+                            issue(ProcessIdentityIssue.GENERATION_CHANGED, "creation_time")
+                            facts["snapshot_link"] = "mismatch"
+                    else:
+                        issue(ProcessIdentityIssue.PROCESS_TIMES_FAILED, "creation_time", self._api.last_error())
+                state = query(ProcessIdentityIssue.WAIT_FAILED, "liveness",
+                              lambda: self._api.WaitForSingleObject(handle, 0))
+                if state is not None:
+                    if state in {WAIT_OBJECT_0, WAIT_TIMEOUT}:
+                        facts["liveness_state"] = (ProcessLiveness.SIGNALED if state == WAIT_OBJECT_0
+                                                   else ProcessLiveness.NOT_SIGNALED)
+                    else:
+                        issue(ProcessIdentityIssue.WAIT_FAILED, "liveness", self._api.last_error())
+                member = BOOL()
+                success = query(ProcessIdentityIssue.JOB_MEMBERSHIP_QUERY_FAILED, "job_membership",
+                    lambda: self._api.IsProcessInJob(handle, job._raw(), C.byref(member)))
+                if success is not None:
+                    if success:
+                        facts["job_membership"] = bool(member.value)
+                        if not member.value:
+                            issue(ProcessIdentityIssue.NOT_CURRENT_JOB_MEMBER, "job_membership")
+                    else:
+                        issue(ProcessIdentityIssue.JOB_MEMBERSHIP_QUERY_FAILED, "job_membership",
+                              self._api.last_error())
+        return NonRootProcessEvidence(pid, sequence, started, now(),
+                                      handle_acquired=acquired, issues=tuple(issues), **facts)
 
     def make_stdio(self, scope):
         self._check()

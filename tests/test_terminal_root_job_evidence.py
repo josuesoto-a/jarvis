@@ -192,7 +192,7 @@ def test_native_root_pid_recording_follows_p1_and_handle_adoption(monkeypatch):
     assert observed == [api.root_pid]
     assert outcome.cleanup.creation.root_pid == api.root_pid
     assert outcome.process_resumed
-    assert "GetProcessId" not in W.API_SIGNATURES
+    assert api.counts["GetProcessId"] == 0  # Root identity still comes from post-P1 output.
 
 
 def test_native_invalid_pid_does_not_erase_creation_success():

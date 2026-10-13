@@ -1,0 +1,38 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_ test_original_liveness_reproduction_rejects_unacquired_handle[not_signaled] _
+
+state = <ProcessLiveness.NOT_SIGNALED: 'not_signaled'>
+
+    @pytest.mark.parametrize("state", [R.ProcessLiveness.NOT_SIGNALED, R.ProcessLiveness.SIGNALED])
+    def test_original_liveness_reproduction_rejects_unacquired_handle(state):
+>       with pytest.raises(ValueError, match="acquired observation handle"):
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_terminal_process_evidence_validators.py:16: Failed
+___ test_original_liveness_reproduction_rejects_unacquired_handle[signaled] ___
+
+state = <ProcessLiveness.SIGNALED: 'signaled'>
+
+    @pytest.mark.parametrize("state", [R.ProcessLiveness.NOT_SIGNALED, R.ProcessLiveness.SIGNALED])
+    def test_original_liveness_reproduction_rejects_unacquired_handle(state):
+>       with pytest.raises(ValueError, match="acquired observation handle"):
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_terminal_process_evidence_validators.py:16: Failed
+_______ test_original_unc_reproduction_cannot_establish_known_identity ________
+
+    def test_original_unc_reproduction_cannot_establish_known_identity():
+        path = "\\\\server\\\\"
+>       assert not R.full_process_image_path(path)
+E       AssertionError: assert not True
+E        +  where True = <function full_process_image_path at 0x00000213DC336700>('\\\\server\\\\')
+E        +    where <function full_process_image_path at 0x00000213DC336700> = R.full_process_image_path
+
+tests\test_terminal_process_evidence_validators.py:22: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_terminal_process_evidence_validators.py::test_original_liveness_reproduction_rejects_unacquired_handle[not_signaled]
+FAILED tests/test_terminal_process_evidence_validators.py::test_original_liveness_reproduction_rejects_unacquired_handle[signaled]
+FAILED tests/test_terminal_process_evidence_validators.py::test_original_unc_reproduction_cannot_establish_known_identity
+3 failed, 42 deselected in 0.18s
+{"phase": "D1G-D2B-R2", "pytest_exit_code": 1, "collected": 3, "results": {"passed": 0, "failed": 3, "skipped": 0}, "seconds": 0.35900000005494803, "blocked_process_events": {"audit_events": [], "launch_api_attempts": [], "native_symbol_attempts": []}, "winapi_launch_guard_retained": true, "no_live_launch_evidence": true, "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded", "historical_live_harness_invoked": false}

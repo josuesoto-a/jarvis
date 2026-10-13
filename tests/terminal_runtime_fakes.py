@@ -10,6 +10,8 @@ from capabilities.terminal import TerminalExecutionTarget, _environment_identity
 from capabilities.terminal_runtime import (
     FileEvidence, ReadResult, StdioResources, StreamResources,
     LaunchAdmissionDomain, WindowsTerminalRuntime, JobPidSnapshot,
+    NON_ROOT_OBSERVATION_CAPACITY, NonRootProcessEvidence, ProcessLiveness,
+    ProcessIdentityIssue, ProcessObservationIssue,
 )
 from terminal_fixtures import console_pe_bytes
 
@@ -83,6 +85,7 @@ class FakeRuntimeBackend:
         self.active_counts = deque()
         self.pid_snapshots = deque()
         self.pid_snapshot = JobPidSnapshot()
+        self.process_observations = {}
         self.exit = 0
         self.resume_count = 1
         self.member = True
@@ -147,6 +150,36 @@ class FakeRuntimeBackend:
 
     def configure_job(self, job):
         self._event("configure_job", job.name)
+
+
+    def prepare_observation_handles(self, scope):
+        self._event("prepare_observation_handles")
+        owners = []
+        for index in range(NON_ROOT_OBSERVATION_CAPACITY):
+            owner, token = self._own(scope, "process-observation-" + str(index))
+            token.observation_used = False
+            owners.append(owner)
+        return tuple(owners)
+
+    def observe_process(self, observation, job, pid, sequence, previous_generation,
+                        now, deadline, permitted):
+        assert not observation.observation_used and not observation.closed
+        observation.observation_used = True
+        started = now()
+        self._event("observe_process", observation.name, pid)
+        if now() >= deadline or not permitted():
+            return NonRootProcessEvidence(pid, sequence, started, now(), issues=(
+                ProcessObservationIssue(ProcessIdentityIssue.OBSERVATION_STOPPED, "open_process"),))
+        values = dict(confirmed_pid=pid, image_path=r"C:\Tools\member.exe",
+                      creation_time=0x01D0000000000001, liveness_state=ProcessLiveness.NOT_SIGNALED,
+                      job_membership=True, handle_acquired=True)
+        values.update(self.process_observations.get(pid, {}))
+        issues = tuple(values.pop("issues", ())) + (
+            ProcessObservationIssue(ProcessIdentityIssue.SNAPSHOT_LINK_UNPROVEN, "snapshot_to_open"),)
+        if previous_generation is not None and values.get("creation_time") != previous_generation:
+            issues += (ProcessObservationIssue(ProcessIdentityIssue.GENERATION_CHANGED, "creation_time"),)
+            values["snapshot_link"] = "mismatch"
+        return NonRootProcessEvidence(pid, sequence, started, now(), issues=issues, **values)
 
     def make_stdio(self, scope):
         self._event("make_stdio")

@@ -1,0 +1,4 @@
+........................................................................ [ 83%]
+..............                                                           [100%]
+86 passed in 0.45s
+{"phase": "D1G-D2B-R2", "pytest_exit_code": 0, "collected": 86, "results": {"passed": 86, "failed": 0, "skipped": 0}, "seconds": 0.5939999999245629, "blocked_process_events": {"audit_events": [], "launch_api_attempts": [], "native_symbol_attempts": []}, "winapi_launch_guard_retained": true, "no_live_launch_evidence": true, "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded", "historical_live_harness_invoked": false}

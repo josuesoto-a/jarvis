@@ -1,0 +1,21 @@
+{
+  "phase": "D1G-D2B2",
+  "mode": "ordinary-launch-guarded",
+  "pytest_exit_code": 0,
+  "collected": 1686,
+  "results": {
+    "passed": 1686,
+    "failed": 0,
+    "skipped": 0
+  },
+  "seconds": 13.454000000027008,
+  "blocked_process_events": {
+    "audit_events": [],
+    "launch_api_attempts": [],
+    "native_symbol_attempts": []
+  },
+  "winapi_launch_guard_retained": true,
+  "no_live_launch_evidence": true,
+  "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded",
+  "historical_live_harness_invoked": false
+}

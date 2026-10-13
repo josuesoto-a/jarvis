@@ -65,7 +65,8 @@ def test_all_live_entry_points_have_explicit_signatures_and_no_opaque_internals(
     assert W.API_SIGNATURES["DeleteProcThreadAttributeList"][0] is None
     assert not hasattr(W, "PROC_THREAD_ATTRIBUTE_LIST")
     assert "AssignProcessToJobObject" not in W.API_SIGNATURES
-    assert "GetProcessId" not in W.API_SIGNATURES and "GetThreadId" not in W.API_SIGNATURES
+    assert W.API_SIGNATURES["GetProcessId"] == (W.DWORD, [W.HANDLE])
+    assert "GetThreadId" not in W.API_SIGNATURES
 
 
 @pytest.mark.parametrize("argv", [(), ("",), ("a b", "ends\\", 'a"b'), ("🌍", "空 白", " a ")])

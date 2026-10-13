@@ -51,6 +51,7 @@ class FakeBindings:
         self.pid_snapshots = deque()
         self.pid_snapshot = ()
         self.pid_query_failure = None
+        self.observed_processes = {}
         self.exited = False
         self.resumed = False
         self.exit = 0
@@ -191,7 +192,11 @@ class FakeBindings:
         return 1
 
     def _IsProcessInJob(self, process, job, result):
-        assert process == 0xE001
+        if process != 0xE001:
+            assert self.handles[process]["kind"] == "observation"
+            assert not self.handles[process]["closed"]
+            pointer(result, W.BOOL)[0] = self.handles[process]["evidence"].get("member", True)
+            return 1
         pointer(result, W.BOOL)[0] = self.member
         return 1
 
@@ -259,6 +264,39 @@ class FakeBindings:
         self.exited = True
         self.active = 0
         return self.suspend_count
+
+
+    def _OpenProcess(self, access, inherit, pid):
+        assert access == 0x00101000 and inherit is False
+        facts = dict(self.observed_processes.get(pid, {}))
+        handle = self._new("observation")
+        self.handles[handle]["pid"] = facts.get("pid", pid)
+        self.handles[handle]["evidence"] = facts
+        return handle
+
+    def _GetProcessId(self, process):
+        assert not self.handles[process]["closed"]
+        return self.handles[process]["pid"]
+
+    def _QueryFullProcessImageNameW(self, process, flags, output, length):
+        assert flags == 0 and not self.handles[process]["closed"]
+        path = self.handles[process]["evidence"].get("path", r"C:\Tools\member.exe")
+        buffer = W._utf16(path)
+        capacity = pointer(length, W.DWORD)[0]
+        if len(buffer) > capacity:
+            self.error = W.ERROR_INSUFFICIENT_BUFFER
+            return 0
+        C.memmove(output, buffer, C.sizeof(buffer))
+        pointer(length, W.DWORD)[0] = len(buffer) - 1
+        return 1
+
+    def _GetProcessTimes(self, process, created, exited, kernel, user):
+        assert not self.handles[process]["closed"]
+        value = self.handles[process]["evidence"].get("creation_time", 0x01D0000000000001)
+        info = pointer(created, W.FILETIME).contents
+        info.dwHighDateTime = value >> 32
+        info.dwLowDateTime = value & 0xFFFFFFFF
+        return 1
 
     def _GetCurrentProcess(self):
         return W.INVALID_HANDLE_VALUE
@@ -336,7 +374,11 @@ class FakeBindings:
         return 1
 
     def _WaitForSingleObject(self, process, timeout):
-        assert process == 0xE001 and timeout == 0
+        assert timeout == 0
+        if process != 0xE001:
+            assert self.handles[process]["kind"] == "observation"
+            assert not self.handles[process]["closed"]
+            return self.handles[process]["evidence"].get("wait", W.WAIT_TIMEOUT)
         return W.WAIT_OBJECT_0 if self.exited else W.WAIT_TIMEOUT
 
     def _WaitForMultipleObjects(self, count, handles, all_handles, timeout):

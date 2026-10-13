@@ -11,7 +11,7 @@ retains its active invocation and any quarantine, even if callers discard them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from math import isfinite
 from threading import Condition, Thread, current_thread, main_thread
@@ -1247,6 +1247,176 @@ class JobPidSnapshot:
         return self.issue is None
 
 
+
+# Total single-use handle acquisitions per invocation, NOT a Job process limit.
+NON_ROOT_OBSERVATION_CAPACITY = 32
+PROCESS_IMAGE_UTF16_CAPACITY = 32768
+
+
+
+def full_process_image_path(value: str) -> bool:
+    """Recognize full Win32 spelling only; never normalize or authorize the image."""
+    def drive_path(path):
+        return (len(path) > 3 and path[0] in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+                and path[1] == ":" and path[2] in "\\/"
+                and all(path[3:].replace("/", "\\").split("\\")))
+
+    if value.startswith("\\\\?\\"):
+        extended = value[4:]
+        if extended[:4].casefold() == "unc\\":
+            parts = extended[4:].split("\\")
+            return len(parts) >= 3 and all(parts)
+        if drive_path(extended):
+            return True
+        # Preserve extended volume-GUID file paths, without accepting arbitrary namespaces.
+        volume, separator, tail = extended.partition("\\")
+        guid = volume[7:-1]
+        return (volume.startswith("Volume{") and volume.endswith("}") and len(guid) == 36
+                and all(guid[i] == "-" if i in {8, 13, 18, 23}
+                        else guid[i] in "0123456789abcdefABCDEF" for i in range(36))
+                and bool(separator) and all(tail.split("\\")))
+    if value.startswith("\\\\"):
+        parts = value[2:].split("\\")
+        return len(parts) >= 3 and all(parts)
+    return drive_path(value)
+
+class ProcessLiveness(str, Enum):
+    UNKNOWN = "unknown"
+    SIGNALED = "signaled"
+    NOT_SIGNALED = "not_signaled"
+
+
+class ProcessIdentityClassification(str, Enum):
+    KNOWN_ROOT = "known_root"
+    KNOWN_NON_ROOT_PROCESS = "known_non_root_process"
+    POSSIBLE_OS_COMPANION = "possible_os_companion"
+    UNKNOWN_NON_ROOT = "unknown_non_root"
+    PID_IDENTITY_RACE = "pid_identity_race"
+    IDENTITY_QUERY_FAILED = "identity_query_failed"
+
+
+class ProcessIdentityIssue(str, Enum):
+    OPEN_PROCESS_FAILED = "open_process_failed"
+    OPEN_OUTCOME_UNCERTAIN = "open_outcome_uncertain"
+    PID_QUERY_FAILED = "pid_query_failed"
+    PID_MISMATCH = "pid_mismatch"
+    GENERATION_CHANGED = "generation_changed"
+    SNAPSHOT_LINK_UNPROVEN = "snapshot_link_unproven"
+    IMAGE_QUERY_FAILED = "image_query_failed"
+    IMAGE_BUFFER_EXHAUSTED = "image_buffer_exhausted"
+    PROCESS_TIMES_FAILED = "process_times_failed"
+    WAIT_FAILED = "wait_failed"
+    JOB_MEMBERSHIP_QUERY_FAILED = "job_membership_query_failed"
+    NOT_CURRENT_JOB_MEMBER = "not_current_job_member"
+    OBSERVATION_CAPACITY_EXHAUSTED = "observation_capacity_exhausted"
+    OBSERVATION_STOPPED = "observation_stopped"
+    HANDLE_RELEASE_UNCERTAIN = "handle_release_uncertain"
+    BACKEND_EVIDENCE_FAILED = "backend_evidence_failed"
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessObservationIssue:
+    kind: ProcessIdentityIssue
+    stage: str
+    win32_error: int | None = None
+
+    def __post_init__(self):
+        if (type(self.kind) is not ProcessIdentityIssue or type(self.stage) is not str
+                or not self.stage or len(self.stage) > 40
+                or self.win32_error is not None and
+                (type(self.win32_error) is not int or not 0 <= self.win32_error <= 0xFFFFFFFF)):
+            raise ValueError("invalid process observation issue")
+
+
+@dataclass(frozen=True, slots=True)
+class NonRootProcessEvidence:
+    """Opened-object observations; no ancestry, trust or snapshot continuity grant."""
+    requested_pid: int
+    observation_sequence: int
+    started: float
+    finished: float
+    confirmed_pid: int | None = None
+    image_path: str | None = None
+    creation_time: int | None = None  # Lossless unsigned FILETIME, not float seconds.
+    liveness_state: ProcessLiveness = ProcessLiveness.UNKNOWN
+    job_membership: bool | None = None
+    parent_pid: int | None = None
+    parent_source: str = "deferred"
+    parent_issue: str | None = "parent_attestation_deferred"
+    handle_acquired: bool = False
+    release_confirmed: bool | None = None
+    snapshot_link: str = "unproven"
+    known_root: bool = False
+    issues: tuple[ProcessObservationIssue, ...] = ()
+    identity_issue: ProcessIdentityIssue | None = field(init=False)
+    classification: ProcessIdentityClassification = field(init=False)
+
+    def __post_init__(self):
+        for pid in (self.requested_pid, self.confirmed_pid, self.parent_pid):
+            if pid is not None and (type(pid) is not int or not 0 < pid <= 0xFFFFFFFF):
+                raise ValueError("invalid observed PID")
+        if (self.requested_pid is None or type(self.observation_sequence) is not int
+                or not 0 < self.observation_sequence <= 0xFFFFFFFFFFFFFFFF
+                or type(self.started) is not float or type(self.finished) is not float
+                or not isfinite(self.started) or not isfinite(self.finished)
+                or self.finished < self.started
+                or type(self.liveness_state) is not ProcessLiveness
+                or self.job_membership is not None and type(self.job_membership) is not bool
+                or type(self.handle_acquired) is not bool or type(self.known_root) is not bool
+                or self.release_confirmed is not None and type(self.release_confirmed) is not bool
+                or self.snapshot_link not in {"unproven", "mismatch", "root_receipt"}
+                or type(self.issues) is not tuple or len(self.issues) > 16
+                or any(type(i) is not ProcessObservationIssue for i in self.issues)
+                or self.creation_time is not None and (type(self.creation_time) is not int
+                    or not 0 <= self.creation_time <= 0xFFFFFFFFFFFFFFFF)):
+            raise ValueError("invalid process attestation evidence")
+        if self.image_path is not None and (type(self.image_path) is not str
+                or not self.image_path or not full_process_image_path(self.image_path) or "\0" in self.image_path
+                or len(self.image_path.encode("utf-16-le")) // 2 >= PROCESS_IMAGE_UTF16_CAPACITY):
+            raise ValueError("bounded full image path required")
+        if (type(self.parent_source) is not str or len(self.parent_source) > 40
+                or self.parent_issue is not None and
+                (type(self.parent_issue) is not str or len(self.parent_issue) > 64)):
+            raise ValueError("invalid optional parent observation")
+        if not self.handle_acquired and self.liveness_state is not ProcessLiveness.UNKNOWN:
+            raise ValueError("liveness requires an acquired observation handle")
+        if (not self.handle_acquired and any(value is not None for value in
+                (self.confirmed_pid, self.image_path, self.creation_time, self.job_membership))
+                and not self.known_root):
+            raise ValueError("process facts require an acquired observation handle")
+        kinds = tuple(i.kind for i in self.issues)
+        race = any(k in kinds for k in (ProcessIdentityIssue.PID_MISMATCH,
+                                        ProcessIdentityIssue.GENERATION_CHANGED))
+        failed = tuple(k for k in kinds if k is not ProcessIdentityIssue.SNAPSHOT_LINK_UNPROVEN)
+        if self.known_root:
+            classification = ProcessIdentityClassification.KNOWN_ROOT
+        elif race:
+            classification = ProcessIdentityClassification.PID_IDENTITY_RACE
+        elif any(k is not ProcessIdentityIssue.NOT_CURRENT_JOB_MEMBER for k in failed):
+            classification = ProcessIdentityClassification.IDENTITY_QUERY_FAILED
+        elif ProcessIdentityIssue.NOT_CURRENT_JOB_MEMBER in failed:
+            classification = ProcessIdentityClassification.UNKNOWN_NON_ROOT
+        elif (self.handle_acquired and self.confirmed_pid == self.requested_pid
+                and self.image_path is not None and self.creation_time is not None
+                and self.liveness_state is not ProcessLiveness.UNKNOWN and self.job_membership is True):
+            # This is a diagnostic hypothesis only, never an image allowlist.
+            filename = self.image_path.replace("/", "\\").rsplit("\\", 1)[-1].casefold()
+            classification = (ProcessIdentityClassification.POSSIBLE_OS_COMPANION
+                              if filename in {"conhost.exe", "openconsole.exe"}
+                              else ProcessIdentityClassification.KNOWN_NON_ROOT_PROCESS)
+        else:
+            classification = ProcessIdentityClassification.UNKNOWN_NON_ROOT
+        primary = (next((k for k in kinds if k in {ProcessIdentityIssue.PID_MISMATCH,
+                    ProcessIdentityIssue.GENERATION_CHANGED}), None) if race
+                   else failed[0] if failed else kinds[0] if kinds else None)
+        object.__setattr__(self, "identity_issue", primary)
+        object.__setattr__(self, "classification", classification)
+
+    @property
+    def authorizes_continuation(self) -> bool:
+        return False
+
+
 class PostRootJobState(str, Enum):
     JOB_EMPTY = "job_empty"
     ROOT_EXITED_JOB_DRAINING = "root_exited_job_draining"
@@ -1259,6 +1429,7 @@ class PostRootJobObservation:
     active_processes: int | None
     pid_snapshot: JobPidSnapshot | None
     state: PostRootJobState
+    process_evidence: tuple[NonRootProcessEvidence, ...] = ()
 
     def __post_init__(self):
         if self.active_processes is not None and (type(self.active_processes) is not int
@@ -1266,6 +1437,10 @@ class PostRootJobObservation:
             raise ValueError("invalid Job accounting observation")
         if self.pid_snapshot is not None and type(self.pid_snapshot) is not JobPidSnapshot:
             raise TypeError("semantic Job identity snapshot required")
+        if (type(self.process_evidence) is not tuple
+                or len(self.process_evidence) > JOB_PID_OBSERVATION_CAPACITY
+                or any(type(e) is not NonRootProcessEvidence for e in self.process_evidence)):
+            raise ValueError("bounded immutable process observations required")
         if type(self.state) is not PostRootJobState:
             raise TypeError("explicit post-root Job state required")
 
@@ -1359,6 +1534,10 @@ class BackendResourceScope:
         self.ordered: list[OwnedResource] = []
         self.creation_only: list[OwnedResource] = []
         self.streams: list[StreamResources] = []
+        self.observation_handles: tuple[OwnedResource, ...] = ()
+        self.observation_next = 0
+        self.observation_sequence = 0
+        self.observed_generations: dict[int, int] = {}
 
     def own(self, name: str, payload: object, *, creation_only=False) -> OwnedResource:
         self.checkpoint()
@@ -1378,6 +1557,10 @@ class TerminalBackend(Protocol):
     def read_executable(self, resource: object, size: int) -> bytes: ...
     def create_job(self, scope: BackendResourceScope) -> OwnedResource: ...
     def configure_job(self, job: object) -> None: ...
+    def prepare_observation_handles(self, scope: BackendResourceScope) -> tuple[OwnedResource, ...]: ...
+    def observe_process(self, observation: object, job: object, pid: int, sequence: int,
+                        previous_generation: int | None, now: Callable[[], float],
+                        deadline: float, permitted: Callable[[], bool]) -> NonRootProcessEvidence: ...
     def make_stdio(self, scope: BackendResourceScope) -> StdioResources: ...
     def connect_pipe(self, memory: object) -> ReadResult: ...
     def prepare_launch(self, scope: BackendResourceScope, target: TerminalExecutionTarget,
@@ -1564,6 +1747,13 @@ class WindowsTerminalRuntime:
             job = self._backend.create_job(scope)
             self._call(invocation, self._backend.configure_job, job)
             self._checkpoint(invocation)
+            stage = "observation_prebinding"
+            scope.observation_handles = self._backend.prepare_observation_handles(scope)
+            if (type(scope.observation_handles) is not tuple
+                    or len(scope.observation_handles) != NON_ROOT_OBSERVATION_CAPACITY
+                    or len({id(r) for r in scope.observation_handles}) != NON_ROOT_OBSERVATION_CAPACITY):
+                raise TerminalLifecycleError("bounded prebound observation owners required")
+            self._checkpoint(invocation)
             stage = "stdio_setup"
             stdio = self._backend.make_stdio(scope)
             for stream in scope.streams:
@@ -1705,6 +1895,54 @@ class WindowsTerminalRuntime:
             for lease in reversed(leases):
                 lease.close()
 
+
+    def _attest_members(self, invocation, scope, job, snapshot):
+        current = invocation.snapshot()
+        receipt = current.creation
+        if (not receipt.process_created or receipt.result_pending or not receipt.adoption_complete
+                or not current.process_exited or current.cleanup_reason is not CleanupReason.ROOT_EXIT
+                or receipt.root_pid is None or not snapshot.complete):
+            return ()  # In particular, CU never enters observational acquisition.
+        evidence = []
+        deadline = min(current.execution_deadline, current.cleanup_deadline)
+        for pid in snapshot.pids:
+            if pid == receipt.root_pid:
+                continue  # Retained root identity, not a new OpenProcess observation.
+            scope.observation_sequence = min(scope.observation_sequence + 1, 0xFFFFFFFFFFFFFFFF)
+            sequence = scope.observation_sequence
+            started = self._now()
+            if scope.observation_next >= len(scope.observation_handles):
+                evidence.append(NonRootProcessEvidence(pid, sequence, started, started,
+                    issues=(ProcessObservationIssue(ProcessIdentityIssue.OBSERVATION_CAPACITY_EXHAUSTED,
+                                                    "ownership_capacity"),)))
+                continue
+            owner = scope.observation_handles[scope.observation_next]
+            scope.observation_next += 1  # Single-use, even if native result is unavailable.
+            try:
+                item = self._call(invocation, self._backend.observe_process, owner, job,
+                    extra=(pid, sequence, scope.observed_generations.get(pid), self._now, deadline,
+                           lambda: invocation.snapshot().cancellation_reason is None))
+                if (type(item) is not NonRootProcessEvidence or item.requested_pid != pid
+                        or item.observation_sequence != sequence or item.known_root
+                        or item.release_confirmed is not None):
+                    raise TerminalLifecycleError("backend supplied invalid process observations")
+            except BaseException:
+                item = NonRootProcessEvidence(pid, sequence, started, self._now(),
+                    issues=(ProcessObservationIssue(ProcessIdentityIssue.BACKEND_EVIDENCE_FAILED,
+                                                    "backend_observation"),))
+            released = self._release(invocation, owner)
+            issues = item.issues
+            if not released:
+                issues += (ProcessObservationIssue(ProcessIdentityIssue.HANDLE_RELEASE_UNCERTAIN,
+                                                   "handle_release"),)
+                invocation.record_cleanup_issue(CleanupIssue.FAILURE)
+            item = replace(item, release_confirmed=released, issues=issues, finished=self._now())
+            evidence.append(item)
+            if item.confirmed_pid == pid and item.creation_time is not None:
+                # Generation corroboration only; never cache identity as a PID authority.
+                scope.observed_generations[pid] = item.creation_time
+        return tuple(evidence)
+
     def _cleanup(self, invocation, scope, job, exit_code):
         snap = invocation.snapshot()
         receipt = snap.creation
@@ -1757,6 +1995,9 @@ class WindowsTerminalRuntime:
                     except BaseException:
                         identity = JobPidSnapshot(issue=JobPidQueryIssue.QUERY_FAILED)
                 observation = classify_post_root_job(active, receipt.root_pid, identity)
+                if identity is not None and identity.complete:
+                    observation = replace(observation, process_evidence=
+                        self._attest_members(invocation, scope, job, identity))
                 if len(observations) < POST_ROOT_OBSERVATION_LIMIT:
                     observations.append(observation)
                 else:

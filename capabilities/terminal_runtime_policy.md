@@ -687,3 +687,52 @@ Capture decoding/newlines, target/v2, approval identity and production authority
 are unchanged. A future binary-output argv is a new frozen target requiring a
 separately authorized D1G-D2B2. Historical D2b STOP and its marker remain intact.
 No new live compatibility result is claimed by these implementation changes.
+
+
+## D1G-D2B2-R2: non-root process attestation (non-spawning implementation)
+
+Non-root identity is observational evidence only. Positive non-root Job PID
+association still fails containment under the existing policy, regardless of
+image name, successful attestation, or apparent console role. CREATE_NO_WINDOW,
+Job flags, target/v2 and the approval projection are unchanged. No companion
+allowance, production wiring or real launch is authorized by this implementation.
+
+Each invocation prebinds 32 single-use opaque observation-handle owners during
+PREFLIGHT. The existing reserve/adopt restriction is unchanged: no cleanup-time
+ledger registration is permitted. A pre-adopted empty wrapper owns any later
+OpenProcess acquisition attempt, including an unavailable return. The total
+32-attempt capacity bounds observation resources only, not Job membership.
+Every excess PID receives OBSERVATION_CAPACITY_EXHAUSTED evidence, not a process
+limit or fabricated identity. Each retained Job observation holds at most the
+existing 1024 PID-capacity number of immutable process observations; the existing
+16-entry Job trace retention bound is unchanged.
+
+Only known P1 with adopted root ownership, a recorded root PID, observed root
+exit and ROOT_EXIT cleanup can enter attestation. CU never opens or queries an
+uncertain process/thread handle, and PID observations cannot repair CU. The native
+entry additionally verifies its prebound owner and the exact known Job token.
+
+OpenProcess requests PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE (0x00101000),
+non-inheritable, with no escalation or helper fallback. GetProcessId confirms the
+opened object before other identity queries. The same owned handle supplies a
+full bounded Win32-format QueryFullProcessImageNameW path, exact integer FILETIME
+creation time, zero-time wait state and IsProcessInJob revalidation. Paths are
+preserved without launch-path normalization or trust inference. Buffer exhaustion
+and partial/malformed output never produce an accepted image prefix. Parent PID
+is explicitly deferred, with None/source/issue metadata and no Toolhelp/NT fallback.
+
+A first numeric snapshot cannot prove snapshot-to-open object continuity. Every
+opened observation retains SNAPSHOT_LINK_UNPROVEN; different confirmed PID or a
+changed previously observed generation additionally records an identity race.
+Repeated numeric IDs never inherit an earlier object's authority. KNOWN_NON_ROOT
+means a queried current process object, not proven ancestry or snapshot continuity.
+POSSIBLE_OS_COMPANION is a filename-shaped diagnostic hypothesis only; it never
+means trusted/expected/allowed. No classification authorizes continuation.
+
+Observation attempts and per-field queries check the existing deadlines and
+cancellation; no sleep, grace interval or budget reset is introduced. Native-query
+failures retain earlier valid facts. Observation handles close through the same
+ledger release path exactly once before evidence publication; unused wrappers
+release without a native close. Unconfirmed release or unavailable acquisition
+uses existing retained ownership, quarantine and poison semantics. Job remains
+last. Accounting zero, root signal and each EOF remain independent facts.

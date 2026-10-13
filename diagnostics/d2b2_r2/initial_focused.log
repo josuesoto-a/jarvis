@@ -1,0 +1,25 @@
+........................................................................ [ 23%]
+........................................................................ [ 47%]
+.....F.................................................................. [ 70%]
+........................................................................ [ 94%]
+..................                                                       [100%]
+================================== FAILURES ===================================
+_ test_all_live_entry_points_have_explicit_signatures_and_no_opaque_internals _
+
+    def test_all_live_entry_points_have_explicit_signatures_and_no_opaque_internals():
+        assert W.API_SIGNATURES["CreateProcessW"][0] is W.BOOL
+        assert len(W.API_SIGNATURES["CreateProcessW"][1]) == 10
+        assert W.API_SIGNATURES["UpdateProcThreadAttribute"][1][2] is W.ULONG_PTR
+        assert W.API_SIGNATURES["InitializeProcThreadAttributeList"][1][0] is W.LPVOID
+        assert W.API_SIGNATURES["DeleteProcThreadAttributeList"][0] is None
+        assert not hasattr(W, "PROC_THREAD_ATTRIBUTE_LIST")
+        assert "AssignProcessToJobObject" not in W.API_SIGNATURES
+>       assert "GetProcessId" not in W.API_SIGNATURES and "GetThreadId" not in W.API_SIGNATURES
+E       AssertionError: assert ('GetProcessId' not in {'OpenProcess': (<class 'ctypes.c_void_p'>, [<class 'ctypes.c_ulong'>, <class 'ctypes.c_long'>, <class 'ctypes.c_ulong...ILETIME'>, <class 'capabilities.terminal_win32.LP_FILETIME'>, <class 'capabilities.terminal_win32.LP_FILETIME'>]), ...})
+E        +  where {'OpenProcess': (<class 'ctypes.c_void_p'>, [<class 'ctypes.c_ulong'>, <class 'ctypes.c_long'>, <class 'ctypes.c_ulong...ILETIME'>, <class 'capabilities.terminal_win32.LP_FILETIME'>, <class 'capabilities.terminal_win32.LP_FILETIME'>]), ...} = W.API_SIGNATURES
+
+tests\test_terminal_win32_contract.py:68: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_terminal_win32_contract.py::test_all_live_entry_points_have_explicit_signatures_and_no_opaque_internals
+1 failed, 305 passed in 5.40s
+{"phase": "D1G-D2B-R2", "pytest_exit_code": 1, "collected": 306, "results": {"passed": 305, "failed": 1, "skipped": 0}, "seconds": 5.594000000040978, "blocked_process_events": {"audit_events": [], "launch_api_attempts": [], "native_symbol_attempts": []}, "winapi_launch_guard_retained": true, "no_live_launch_evidence": true, "scope": "isolated guarded Python pytest host; command-runner test-host startup excluded", "historical_live_harness_invoked": false}
